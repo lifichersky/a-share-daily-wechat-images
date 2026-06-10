@@ -1,0 +1,4 @@
+interface:
+  display_name: "A股日报贴图"
+  short_description: "按交易日生成A股市场情绪复盘四张公众号贴图与短评文案"
+  default_prompt: "请使用 A股日报贴图 技能，为指定交易日生成4张微信公众号贴图和不超过300字的市场短评。"

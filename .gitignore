@@ -1,0 +1,13 @@
+# 输出目录
+temp/
+outputs/
+
+# 依赖
+node_modules/
+
+# 环境变量
+.env
+
+# OS
+.DS_Store
+Thumbs.db

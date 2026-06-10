@@ -1,0 +1,698 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codex.local/a-share-daily-wechat-images/daily-data.schema.json",
+  "title": "A-share daily WeChat image data",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "emotion_model_version",
+    "report_date",
+    "weekday",
+    "theme",
+    "data_quality",
+    "market_summary",
+    "indices",
+    "turnover",
+    "breadth",
+    "capital_flow",
+    "limit_up",
+    "themes",
+    "theme_interpretation",
+    "ladder",
+    "leader_roles",
+    "emotion_model_v1",
+    "next_session_signals",
+    "wechat_commentary_v1",
+    "sources",
+    "assumptions"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.6.0"
+    },
+    "emotion_model_version": {
+      "const": "emotion_model_v1"
+    },
+    "report_date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "weekday": {
+      "enum": ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+    },
+    "theme": {
+      "enum": ["暗金杂志封面风格", "浅色机构午报风格", "深色终端杂志风格"]
+    },
+    "data_quality": {
+      "$ref": "#/$defs/data_quality"
+    },
+    "market_summary": {
+      "type": "object",
+      "required": ["headline", "action", "style_shift"],
+      "properties": {
+        "headline": {"type": "string", "minLength": 1},
+        "action": {"type": "string", "minLength": 1},
+        "style_shift": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "indices": {
+      "type": "array",
+      "minItems": 4,
+      "items": {"$ref": "#/$defs/index_item"},
+      "allOf": [
+        {"contains": {"properties": {"name": {"const": "上证指数"}}, "required": ["name"]}},
+        {"contains": {"properties": {"name": {"const": "深证成指"}}, "required": ["name"]}},
+        {"contains": {"properties": {"name": {"const": "创业板指"}}, "required": ["name"]}},
+        {"contains": {"properties": {"name": {"const": "科创50"}}, "required": ["name"]}}
+      ]
+    },
+    "turnover": {
+      "type": "object",
+      "required": ["amount_text", "amount_yuan", "change_text", "change_yuan", "source_key"],
+      "properties": {
+        "amount_text": {"type": "string"},
+        "amount_yuan": {"type": ["integer", "null"]},
+        "change_text": {"type": ["string", "null"]},
+        "change_yuan": {"type": ["integer", "null"]},
+        "source_key": {"$ref": "#/$defs/source_key"}
+      },
+      "additionalProperties": true
+    },
+    "breadth": {
+      "type": "object",
+      "required": ["up", "down", "notable", "source_key"],
+      "properties": {
+        "up": {"type": ["integer", "null"], "minimum": 0},
+        "down": {"type": ["integer", "null"], "minimum": 0},
+        "flat": {"type": ["integer", "null"], "minimum": 0},
+        "notable": {"type": ["string", "null"]},
+        "source_key": {"$ref": "#/$defs/source_key"}
+      },
+      "additionalProperties": true
+    },
+    "capital_flow": {
+      "type": "object",
+      "required": [
+        "metric_name",
+        "net_text",
+        "net_yuan",
+        "inflow_sectors",
+        "outflow_sectors",
+        "inflow_stocks",
+        "source_key"
+      ],
+      "properties": {
+        "metric_name": {"type": "string"},
+        "net_text": {"type": ["string", "null"]},
+        "net_yuan": {"type": ["integer", "number", "null"]},
+        "inflow_sectors": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/named_amount"}
+        },
+        "outflow_sectors": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/named_amount"}
+        },
+        "inflow_stocks": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/named_amount"}
+        },
+        "source_key": {"$ref": "#/$defs/source_key"}
+      },
+      "additionalProperties": true
+    },
+    "limit_up": {
+      "type": "object",
+      "required": [
+        "display口径",
+        "limit_up",
+        "limit_down",
+        "broken_board",
+        "seal_rate_pct",
+        "source_key",
+        "previous_day"
+      ],
+      "properties": {
+        "display口径": {
+          "enum": ["全口径", "非ST短线口径"]
+        },
+        "limit_up": {"type": ["integer", "null"], "minimum": 0},
+        "limit_down": {"type": ["integer", "null"], "minimum": 0},
+        "broken_board": {"type": ["integer", "null"], "minimum": 0},
+        "seal_rate_pct": {"type": ["integer", "number", "null"], "minimum": 0, "maximum": 100},
+        "full_market": {
+          "type": "object",
+          "properties": {
+            "limit_up": {"type": ["integer", "null"], "minimum": 0},
+            "limit_down": {"type": ["integer", "null"], "minimum": 0},
+            "broken_board": {"type": ["integer", "null"], "minimum": 0},
+            "seal_rate_pct": {"type": ["integer", "number", "null"], "minimum": 0, "maximum": 100},
+            "口径": {"type": "string"}
+          },
+          "additionalProperties": true
+        },
+        "source_key": {"$ref": "#/$defs/source_key"},
+        "previous_day": {
+          "$ref": "#/$defs/previous_day_limit_up"
+        }
+      },
+      "additionalProperties": true
+    },
+    "themes": {
+      "type": "object",
+      "required": ["concept_counts", "industry_counts", "strong", "weak"],
+      "properties": {
+        "concept_counts": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/theme_count"}
+        },
+        "industry_counts": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/theme_count"}
+        },
+        "strong": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "weak": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      },
+      "additionalProperties": true
+    },
+    "theme_interpretation": {
+      "$ref": "#/$defs/theme_interpretation"
+    },
+    "ladder": {
+      "type": "object",
+      "required": ["highest_non_st_board", "promotion", "boards", "previous_day"],
+      "properties": {
+        "highest_non_st_board": {"type": ["integer", "null"], "minimum": 0},
+        "promotion": {
+          "type": "object",
+          "properties": {
+            "3_to_4": {"$ref": "#/$defs/promotion_item"},
+            "2_to_3": {"$ref": "#/$defs/promotion_item"},
+            "1_to_2": {"$ref": "#/$defs/promotion_item"},
+            "first_board": {"$ref": "#/$defs/promotion_item"}
+          },
+          "additionalProperties": {"$ref": "#/$defs/promotion_item"}
+        },
+        "boards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["board", "stocks"],
+            "properties": {
+              "board": {"type": "integer", "minimum": 1},
+              "stocks": {
+                "type": "array",
+                "items": {"$ref": "#/$defs/stock_item"}
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "previous_day": {
+          "$ref": "#/$defs/previous_day_ladder"
+        }
+      },
+      "additionalProperties": true
+    },
+    "leader_roles": {
+      "type": "object",
+      "required": [
+        "空间龙",
+        "板块龙头",
+        "容量中军",
+        "核心助攻",
+        "中位接力",
+        "补涨前排",
+        "首板前排",
+        "风险负反馈"
+      ],
+      "properties": {
+        "空间龙": {"type": "array", "items": {"$ref": "#/$defs/role_item"}},
+        "板块龙头": {"type": "array", "items": {"$ref": "#/$defs/role_item"}},
+        "容量中军": {"type": "array", "items": {"$ref": "#/$defs/role_item"}},
+        "核心助攻": {"type": "array", "items": {"$ref": "#/$defs/role_item"}},
+        "中位接力": {"type": "array", "items": {"$ref": "#/$defs/role_item"}},
+        "补涨前排": {"type": "array", "items": {"$ref": "#/$defs/role_item"}},
+        "首板前排": {"type": "array", "items": {"$ref": "#/$defs/role_item"}},
+        "风险负反馈": {"type": "array", "items": {"$ref": "#/$defs/role_item"}}
+      },
+      "additionalProperties": false
+    },
+    "emotion_model_v1": {
+      "type": "object",
+      "required": ["score", "state", "confidence", "factors"],
+      "properties": {
+        "score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "state": {
+          "enum": ["冰点退潮", "弱修复", "分歧震荡", "分歧修复初期", "主线扩散", "情绪高潮"]
+        },
+        "confidence": {"enum": ["high", "medium", "low"]},
+        "override_reason": {"type": "string"},
+        "factors": {
+          "type": "array",
+          "minItems": 10,
+          "maxItems": 10,
+          "items": {"$ref": "#/$defs/emotion_factor"},
+          "allOf": [
+            {"contains": {"properties": {"name": {"const": "指数强度"}}, "required": ["name"]}},
+            {"contains": {"properties": {"name": {"const": "市场广度"}}, "required": ["name"]}},
+            {"contains": {"properties": {"name": {"const": "量能变化"}}, "required": ["name"]}},
+            {"contains": {"properties": {"name": {"const": "主力资金"}}, "required": ["name"]}},
+            {"contains": {"properties": {"name": {"const": "涨停强度"}}, "required": ["name"]}},
+            {"contains": {"properties": {"name": {"const": "炸板风险"}}, "required": ["name"]}},
+            {"contains": {"properties": {"name": {"const": "连板高度"}}, "required": ["name"]}},
+            {"contains": {"properties": {"name": {"const": "晋级率"}}, "required": ["name"]}},
+            {"contains": {"properties": {"name": {"const": "主线集中度"}}, "required": ["name"]}},
+            {"contains": {"properties": {"name": {"const": "跌停负反馈"}}, "required": ["name"]}}
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "next_session_signals": {
+      "type": "object",
+      "required": ["确认信号", "弱化信号", "风险信号"],
+      "properties": {
+        "确认信号": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "弱化信号": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "风险信号": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "wechat_commentary_v1": {
+      "$ref": "#/$defs/wechat_commentary_v1"
+    },
+    "sources": {
+      "type": "object",
+      "required": ["financial_analysis"],
+      "minProperties": 4,
+      "additionalProperties": {"$ref": "#/$defs/source_item"}
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "source_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "data_quality": {
+      "type": "object",
+      "required": [
+        "status",
+        "confidence",
+        "source_coverage",
+        "missing_fields",
+        "conflicts",
+        "warnings"
+      ],
+      "properties": {
+        "status": {
+          "enum": ["complete", "review_needed", "incomplete"]
+        },
+        "confidence": {
+          "enum": ["high", "medium", "low"]
+        },
+        "source_coverage": {
+          "type": "object",
+          "required": ["financial_analysis", "eastmoney", "cls", "stcn_databao"],
+          "properties": {
+            "financial_analysis": {"type": "boolean"},
+            "eastmoney": {"type": "boolean"},
+            "cls": {"type": "boolean"},
+            "stcn_databao": {"type": "boolean"}
+          },
+          "additionalProperties": false
+        },
+        "missing_fields": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["field", "values", "chosen", "reason", "resolved"],
+            "properties": {
+              "field": {"type": "string"},
+              "values": {"type": "array", "minItems": 2},
+              "chosen": {},
+              "reason": {"type": "string", "minLength": 1},
+              "resolved": {"type": "boolean"}
+            },
+            "additionalProperties": true
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "source_item": {
+      "type": "object",
+      "required": ["name", "url"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "url": {"type": ["string", "null"]},
+        "note": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "index_item": {
+      "type": "object",
+      "required": ["name", "close", "pct", "source_key"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "close": {"type": ["number", "null"]},
+        "pct": {"type": ["number", "null"]},
+        "source_key": {"$ref": "#/$defs/source_key"}
+      },
+      "additionalProperties": true
+    },
+    "named_amount": {
+      "type": "object",
+      "required": ["name", "amount_text"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "amount_text": {"type": ["string", "null"]},
+        "role_hint": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "theme_count": {
+      "type": "object",
+      "required": ["name", "口径"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "up": {"type": ["integer", "number", "null"]},
+        "sample": {"type": ["integer", "number", "null"]},
+        "pct": {"type": ["integer", "number", "null"]},
+        "口径": {
+          "enum": ["题材概念口径", "行业口径", "全口径", "非ST短线口径"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "theme_interpretation": {
+      "type": "object",
+      "required": ["status", "upside", "downside"],
+      "properties": {
+        "status": {
+          "enum": ["both", "upside_only", "downside_only", "no_clear_mainline"]
+        },
+        "upside": {
+          "type": "array",
+          "maxItems": 2,
+          "items": {"$ref": "#/$defs/theme_interpretation_item"}
+        },
+        "downside": {
+          "type": "array",
+          "maxItems": 2,
+          "items": {"$ref": "#/$defs/theme_interpretation_item"}
+        },
+        "no_clear_mainline": {
+          "$ref": "#/$defs/theme_interpretation_state"
+        }
+      },
+      "allOf": [
+        {
+          "if": {"required": ["status"], "properties": {"status": {"const": "both"}}},
+          "then": {"properties": {"upside": {"minItems": 1}, "downside": {"minItems": 1}}}
+        },
+        {
+          "if": {"required": ["status"], "properties": {"status": {"const": "upside_only"}}},
+          "then": {"properties": {"upside": {"minItems": 1}, "downside": {"maxItems": 0}}}
+        },
+        {
+          "if": {"required": ["status"], "properties": {"status": {"const": "downside_only"}}},
+          "then": {"properties": {"upside": {"maxItems": 0}, "downside": {"minItems": 1}}}
+        },
+        {
+          "if": {"required": ["status"], "properties": {"status": {"const": "no_clear_mainline"}}},
+          "then": {
+            "required": ["no_clear_mainline"],
+            "properties": {"upside": {"maxItems": 0}, "downside": {"maxItems": 0}}
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "theme_interpretation_item": {
+      "type": "object",
+      "required": [
+        "name",
+        "stage",
+        "core_judgment",
+        "narrative",
+        "confirm_signal",
+        "invalidate_signal",
+        "source_keys"
+      ],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "stage": {"type": "string", "minLength": 1},
+        "core_judgment": {"type": "string", "minLength": 1},
+        "narrative": {"type": "string", "minLength": 1},
+        "confirm_signal": {"type": "string", "minLength": 1},
+        "invalidate_signal": {"type": "string", "minLength": 1},
+        "source_keys": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/source_key"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "theme_interpretation_state": {
+      "type": "object",
+      "required": [
+        "stage",
+        "core_judgment",
+        "narrative",
+        "confirm_signal",
+        "invalidate_signal",
+        "source_keys"
+      ],
+      "properties": {
+        "stage": {"type": "string", "minLength": 1},
+        "core_judgment": {"type": "string", "minLength": 1},
+        "narrative": {"type": "string", "minLength": 1},
+        "confirm_signal": {"type": "string", "minLength": 1},
+        "invalidate_signal": {"type": "string", "minLength": 1},
+        "source_keys": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/source_key"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "wechat_commentary_v1": {
+      "type": "object",
+      "required": [
+        "text",
+        "core_judgment",
+        "capital_logic",
+        "validation_signal",
+        "source_keys"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "core_judgment": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capital_logic": {
+          "type": "string",
+          "minLength": 1
+        },
+        "validation_signal": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_keys": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/source_key"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "promotion_item": {
+      "type": "object",
+      "required": ["success", "sample"],
+      "properties": {
+        "success": {"type": ["integer", "null"], "minimum": 0},
+        "sample": {"type": ["integer", "null"], "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "previous_day_ladder": {
+      "type": "object",
+      "required": ["date", "highest_non_st_board", "consecutive_board_total", "source_key"],
+      "properties": {
+        "date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "highest_non_st_board": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "consecutive_board_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source_key": {
+          "$ref": "#/$defs/source_key"
+        }
+      },
+      "additionalProperties": true
+    },
+    "previous_day_limit_up": {
+      "type": "object",
+      "required": ["date", "limit_up", "limit_down", "broken_board", "seal_rate_pct", "source_key"],
+      "properties": {
+        "date": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "limit_up": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "limit_down": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "broken_board": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "seal_rate_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "source_key": {
+          "$ref": "#/$defs/source_key"
+        }
+      },
+      "additionalProperties": true
+    },
+    "stock_item": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "theme": {"type": ["string", "null"]},
+        "role": {
+          "enum": [
+            "空间龙",
+            "板块龙头",
+            "容量中军",
+            "核心助攻",
+            "中位接力",
+            "补涨前排",
+            "首板前排",
+            "风险负反馈"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "role_item": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "theme": {"type": ["string", "null"]},
+        "board": {"type": ["integer", "null"], "minimum": 0},
+        "reason": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "emotion_factor": {
+      "type": "object",
+      "required": ["name", "score", "max", "reason"],
+      "properties": {
+        "name": {
+          "enum": [
+            "指数强度",
+            "市场广度",
+            "量能变化",
+            "主力资金",
+            "涨停强度",
+            "炸板风险",
+            "连板高度",
+            "晋级率",
+            "主线集中度",
+            "跌停负反馈"
+          ]
+        },
+        "score": {"type": "integer", "minimum": 0},
+        "max": {"type": "integer"},
+        "reason": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"name": {"const": "指数强度"}}},
+          "then": {"properties": {"max": {"const": 15}, "score": {"maximum": 15}}}
+        },
+        {
+          "if": {"properties": {"name": {"const": "市场广度"}}},
+          "then": {"properties": {"max": {"const": 12}, "score": {"maximum": 12}}}
+        },
+        {
+          "if": {"properties": {"name": {"const": "量能变化"}}},
+          "then": {"properties": {"max": {"const": 8}, "score": {"maximum": 8}}}
+        },
+        {
+          "if": {"properties": {"name": {"const": "主力资金"}}},
+          "then": {"properties": {"max": {"const": 10}, "score": {"maximum": 10}}}
+        },
+        {
+          "if": {"properties": {"name": {"const": "涨停强度"}}},
+          "then": {"properties": {"max": {"const": 15}, "score": {"maximum": 15}}}
+        },
+        {
+          "if": {"properties": {"name": {"const": "炸板风险"}}},
+          "then": {"properties": {"max": {"const": 12}, "score": {"maximum": 12}}}
+        },
+        {
+          "if": {"properties": {"name": {"const": "连板高度"}}},
+          "then": {"properties": {"max": {"const": 10}, "score": {"maximum": 10}}}
+        },
+        {
+          "if": {"properties": {"name": {"const": "晋级率"}}},
+          "then": {"properties": {"max": {"const": 8}, "score": {"maximum": 8}}}
+        },
+        {
+          "if": {"properties": {"name": {"const": "主线集中度"}}},
+          "then": {"properties": {"max": {"const": 6}, "score": {"maximum": 6}}}
+        },
+        {
+          "if": {"properties": {"name": {"const": "跌停负反馈"}}},
+          "then": {"properties": {"max": {"const": 4}, "score": {"maximum": 4}}}
+        }
+      ],
+      "additionalProperties": true
+    }
+  }
+}

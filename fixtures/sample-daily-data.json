@@ -1,0 +1,256 @@
+{
+  "schema_version": "1.6.0",
+  "emotion_model_version": "emotion_model_v1",
+  "report_date": "2026-05-29",
+  "weekday": "周五",
+  "theme": "暗金杂志封面风格",
+  "data_quality": {
+    "status": "complete",
+    "confidence": "high",
+    "source_coverage": {
+      "financial_analysis": true,
+      "eastmoney": true,
+      "cls": true,
+      "stcn_databao": true
+    },
+    "missing_fields": [],
+    "conflicts": [
+      {
+        "field": "turnover.amount_text",
+        "values": ["3.34万亿", "3.32万亿"],
+        "chosen": "3.34万亿",
+        "reason": "采用沪深京全市场成交额口径",
+        "resolved": true
+      }
+    ],
+    "warnings": []
+  },
+  "market_summary": {
+    "headline": "放量分歧 · 科技兑现 · 防御承接",
+    "action": "集体调整后分化修复",
+    "style_shift": "科技高位兑现，电力地产等防御方向承接"
+  },
+  "indices": [
+    {"name": "上证指数", "close": 4068.57, "pct": -0.73, "source_key": "eastmoney_index"},
+    {"name": "深证成指", "close": 15575.13, "pct": -1.81, "source_key": "eastmoney_index"},
+    {"name": "创业板指", "close": 4037.95, "pct": -2.11, "source_key": "eastmoney_index"},
+    {"name": "科创50", "close": 1751.32, "pct": -5.04, "source_key": "eastmoney_index"}
+  ],
+  "turnover": {
+    "amount_text": "3.34万亿",
+    "amount_yuan": 3341300000000,
+    "change_text": "较上日放量约3500亿",
+    "change_yuan": 350000000000,
+    "source_key": "eastmoney_market"
+  },
+  "breadth": {
+    "up": 1542,
+    "down": 3884,
+    "flat": 89,
+    "notable": "下跌近3900家",
+    "source_key": "eastmoney_market"
+  },
+  "capital_flow": {
+    "metric_name": "主力资金",
+    "net_text": "-1050.25亿",
+    "net_yuan": -105025000000,
+    "inflow_sectors": [
+      {"name": "电力", "amount_text": "+55亿"},
+      {"name": "食品饮料", "amount_text": "+26亿"},
+      {"name": "银行", "amount_text": "+20亿"}
+    ],
+    "outflow_sectors": [
+      {"name": "电子/半导体", "amount_text": "-370亿"},
+      {"name": "电力设备", "amount_text": "-100亿"},
+      {"name": "机械设备", "amount_text": "-100亿"}
+    ],
+    "inflow_stocks": [
+      {"name": "亨通光电", "amount_text": "+39亿", "role_hint": "容量中军"}
+    ],
+    "source_key": "eastmoney_capital"
+  },
+  "limit_up": {
+    "display口径": "非ST短线口径",
+    "limit_up": 49,
+    "limit_down": 59,
+    "broken_board": 37,
+    "seal_rate_pct": 56,
+    "full_market": {
+      "limit_up": 67,
+      "limit_down": 59,
+      "broken_board": 71,
+      "seal_rate_pct": 48.55,
+      "口径": "全口径"
+    },
+    "source_key": "cls_limit_review",
+    "previous_day": {
+      "date": "2026-05-28",
+      "limit_up": 63,
+      "limit_down": 21,
+      "broken_board": 42,
+      "seal_rate_pct": 60,
+      "source_key": "previous_daily_data"
+    }
+  },
+  "themes": {
+    "concept_counts": [
+      {"name": "电力", "up": 8, "pct": 5.2, "sample": 12, "口径": "题材概念口径"},
+      {"name": "房地产", "up": 6, "pct": 3.8, "sample": 10, "口径": "题材概念口径"},
+      {"name": "电网设备", "up": 5, "pct": 3.1, "sample": 9, "口径": "题材概念口径"},
+      {"name": "专业工程", "up": 4, "pct": 2.4, "sample": 8, "口径": "题材概念口径"},
+      {"name": "PCB", "up": 3, "pct": 1.8, "sample": 7, "口径": "题材概念口径"},
+      {"name": "食品饮料", "up": 3, "pct": 1.2, "sample": 6, "口径": "题材概念口径"},
+      {"name": "机器人", "up": 1, "pct": -1.94, "sample": 4, "口径": "题材概念口径"},
+      {"name": "电子化学品", "up": 0, "pct": -2.86, "sample": 4, "口径": "题材概念口径"},
+      {"name": "光学光电子", "up": 0, "pct": -3.18, "sample": 5, "口径": "题材概念口径"},
+      {"name": "半导体", "up": 1, "pct": -4.65, "sample": 6, "口径": "题材概念口径"},
+      {"name": "AI算力", "up": 0, "pct": -5.42, "sample": 5, "口径": "题材概念口径"}
+    ],
+    "industry_counts": [
+      {"name": "公用事业", "pct": 2.8, "口径": "行业口径"},
+      {"name": "房地产开发", "pct": 1.43, "口径": "行业口径"},
+      {"name": "银行", "pct": 0.72, "口径": "行业口径"},
+      {"name": "食品饮料", "pct": 0.56, "口径": "行业口径"},
+      {"name": "半导体", "pct": -4.65, "口径": "行业口径"},
+      {"name": "光学光电子", "pct": -3.18, "口径": "行业口径"}
+    ],
+    "strong": ["电力", "房地产", "银行"],
+    "weak": ["半导体", "电子化学品", "光学光电子"]
+  },
+  "theme_interpretation": {
+    "status": "both",
+    "upside": [
+      {
+        "name": "电力",
+        "stage": "防御承接",
+        "core_judgment": "电力不是单纯补涨，而是分歧日资金从高波动科技切出的低位承接方向",
+        "narrative": "指数放量分歧时，能源安全和公用事业的低波动属性被重新定价；题材涨停8只且华电能源、粤电力A维持梯队，说明资金在高位科技兑现后寻找可容纳分歧的防御主线。",
+        "confirm_signal": "华电能源或粤电力A继续晋级，并带动首板补涨扩散",
+        "invalidate_signal": "高标断板后后排同步掉队，防御承接退化为一日轮动",
+        "source_keys": ["stcn_databao", "cls_limit_review"]
+      },
+      {
+        "name": "房地产",
+        "stage": "低位补涨试错",
+        "core_judgment": "房地产更像低位轮动试错，空间股给了弹性，但还没有独立主升确认",
+        "narrative": "题材涨停6只且香江控股维持非ST空间高度，说明低位政策预期分支获得短线资金试错；问题在于中位梯队仍不完整，后排若不能继续补齐，资金容易从修复切回兑现。",
+        "confirm_signal": "中位接力补强并形成2到5板完整梯队",
+        "invalidate_signal": "空间股断板且首板补涨明显减少",
+        "source_keys": ["cls_limit_review"]
+      }
+    ],
+    "downside": [
+      {
+        "name": "半导体",
+        "stage": "高位退潮负反馈",
+        "core_judgment": "半导体的下跌是前期成长拥挤交易的兑现，不只是行业单日走弱",
+        "narrative": "行业跌幅居前叠加电子/半导体主力资金大额流出，说明高景气成长线从主动进攻切换到筹码释放；如果容量核心不能止跌，科技线会继续压制指数风险偏好。",
+        "confirm_signal": "容量核心缩量企稳，跌幅榜不再被半导体扩散占据",
+        "invalidate_signal": "核心股继续放量下杀并带动光学光电子、设备链补跌",
+        "source_keys": ["eastmoney_capital"]
+      }
+    ]
+  },
+  "ladder": {
+    "highest_non_st_board": 5,
+    "promotion": {
+      "3_to_4": {"success": 2, "sample": 4},
+      "2_to_3": {"success": 2, "sample": 5},
+      "1_to_2": {"success": 5, "sample": 40},
+      "first_board": {"success": 40, "sample": 86}
+    },
+    "boards": [
+      {"board": 5, "stocks": [{"name": "香江控股", "theme": "地产", "role": "空间龙"}, {"name": "华电能源", "theme": "电力", "role": "空间龙"}]},
+      {"board": 4, "stocks": [{"name": "粤电力A", "theme": "电力", "role": "中位接力"}, {"name": "合锻智能", "theme": "光模块", "role": "中位接力"}]},
+      {"board": 3, "stocks": [{"name": "中百集团", "theme": "零售", "role": "中位接力"}, {"name": "盛龙股份", "theme": "汽配", "role": "中位接力"}, {"name": "步步高", "theme": "消费", "role": "中位接力"}]},
+      {"board": 2, "stocks": [{"name": "天健集团", "theme": "基建", "role": "补涨前排"}, {"name": "诺德股份", "theme": "PCB", "role": "补涨前排"}, {"name": "中京电子", "theme": "PCB", "role": "补涨前排"}, {"name": "真视通", "theme": "算力", "role": "补涨前排"}]},
+      {"board": 1, "stocks": [{"name": "泓淋电力", "theme": "电力", "role": "首板前排"}, {"name": "掌阅科技", "theme": "AI应用", "role": "首板前排"}, {"name": "欢瑞世纪", "theme": "传媒", "role": "首板前排"}, {"name": "百纳千成", "theme": "传媒", "role": "首板前排"}]}
+    ],
+    "previous_day": {
+      "date": "2026-05-28",
+      "highest_non_st_board": 6,
+      "consecutive_board_total": 16,
+      "source_key": "previous_daily_data"
+    }
+  },
+  "leader_roles": {
+    "空间龙": [
+      {"name": "香江控股", "theme": "地产", "board": 5, "reason": "非ST最高连板之一"},
+      {"name": "华电能源", "theme": "电力", "board": 5, "reason": "非ST最高连板之一"}
+    ],
+    "板块龙头": [
+      {"name": "华电能源", "theme": "电力", "board": 5, "reason": "电力方向高度核心"},
+      {"name": "香江控股", "theme": "地产", "board": 5, "reason": "地产方向高度核心"},
+      {"name": "泓淋电力", "theme": "电网设备", "board": 1, "reason": "首板强封带动补涨"}
+    ],
+    "容量中军": [
+      {"name": "亨通光电", "theme": "通信", "board": null, "reason": "大额主力承接"},
+      {"name": "四方股份", "theme": "电力设备", "board": 1, "reason": "容量承接较强"},
+      {"name": "贵州茅台", "theme": "食品饮料", "board": null, "reason": "防御权重承接"}
+    ],
+    "核心助攻": [
+      {"name": "粤电力A", "theme": "电力", "board": 4, "reason": "维持板块梯队"},
+      {"name": "江海股份", "theme": "电力设备", "board": 1, "reason": "补充板块宽度"},
+      {"name": "艾华集团", "theme": "超级电容", "board": 1, "reason": "低位助攻"}
+    ],
+    "中位接力": [
+      {"name": "合锻智能", "theme": "光模块", "board": 4, "reason": "测试中位接力"},
+      {"name": "中百集团", "theme": "零售", "board": 3, "reason": "消费分支接力"},
+      {"name": "盛龙股份", "theme": "汽配", "board": 3, "reason": "中位换手观察"}
+    ],
+    "补涨前排": [
+      {"name": "天健集团", "theme": "基建", "board": 2, "reason": "低位补涨"},
+      {"name": "诺德股份", "theme": "PCB", "board": 2, "reason": "科技分支补涨"},
+      {"name": "中京电子", "theme": "PCB", "board": 2, "reason": "低位承接"}
+    ],
+    "首板前排": [
+      {"name": "泓淋电力", "theme": "电力", "board": 1, "reason": "首板前排"},
+      {"name": "掌阅科技", "theme": "AI应用", "board": 1, "reason": "辨识度首板"},
+      {"name": "欢瑞世纪", "theme": "传媒", "board": 1, "reason": "情绪反抽前排"}
+    ],
+    "风险负反馈": [
+      {"name": "中芯国际", "theme": "半导体", "board": null, "reason": "科技容量方向资金流出"},
+      {"name": "拓荆科技", "theme": "半导体设备", "board": null, "reason": "成长方向继续承压"},
+      {"name": "巨轮智能", "theme": "机器人", "board": null, "reason": "高辨识度负反馈"}
+    ]
+  },
+  "emotion_model_v1": {
+    "score": 42,
+    "state": "分歧震荡",
+    "confidence": "high",
+    "factors": [
+      {"name": "指数强度", "score": 2, "max": 15, "reason": "主要指数集体下跌，科创50跌幅较大"},
+      {"name": "市场广度", "score": 3, "max": 12, "reason": "上涨家数占比偏低"},
+      {"name": "量能变化", "score": 2, "max": 8, "reason": "放量下跌，分歧加剧"},
+      {"name": "主力资金", "score": 1, "max": 10, "reason": "主力资金大幅净流出"},
+      {"name": "涨停强度", "score": 9, "max": 15, "reason": "非ST涨停仍处中等区间"},
+      {"name": "炸板风险", "score": 6, "max": 12, "reason": "封板率约56%"},
+      {"name": "连板高度", "score": 8, "max": 10, "reason": "非ST最高5板"},
+      {"name": "晋级率", "score": 5, "max": 8, "reason": "中高位晋级尚可但首板反馈一般"},
+      {"name": "主线集中度", "score": 4, "max": 6, "reason": "电力地产主线较清晰"},
+      {"name": "跌停负反馈", "score": 2, "max": 4, "reason": "跌停数量偏高"}
+    ]
+  },
+  "next_session_signals": {
+    "确认信号": ["华电能源或香江控股继续晋级并带动板块扩散", "电力/地产补涨继续增加且封单稳定", "成交额维持3万亿以上但指数不再放量下杀"],
+    "弱化信号": ["中位接力票继续放量分歧且补涨断层", "3板以上集体断板导致接力高度压缩", "防御方向冲高回落并与科技资金同时撤离"],
+    "风险信号": ["科技容量核心继续走弱并压制指数风险偏好", "跌停家数维持高位且炸板率继续扩大", "主力资金净流出扩大并传导到银行/消费"]
+  },
+  "wechat_commentary_v1": {
+    "text": "5月29日A股不是单纯回调，而是科技高位拥挤交易的集中兑现。放量下跌叠加主力大幅流出，说明资金在成长线里先做风险释放，再向电力、地产等低位方向寻找承接。明日关键不在指数小幅反抽，而在科技容量核心能否止跌；若中军继续补跌，短线会从分歧转向风险释放。",
+    "core_judgment": "科技高位拥挤交易集中兑现，不是普通指数回调",
+    "capital_logic": "资金先从高波动成长线释放风险，再向电力、地产等低位方向寻找承接",
+    "validation_signal": "明日看科技容量核心能否止跌；若中军继续补跌，短线从分歧转向风险释放",
+    "source_keys": ["eastmoney_capital", "cls_limit_review", "stcn_databao"]
+  },
+  "sources": {
+    "financial_analysis": {"name": "financial-analysis marketInsight", "url": null},
+    "eastmoney_index": {"name": "东方财富行情", "url": "https://quote.eastmoney.com/"},
+    "eastmoney_market": {"name": "东方财富市场数据", "url": "https://quote.eastmoney.com/"},
+    "eastmoney_capital": {"name": "东方财富资金流向", "url": "https://data.eastmoney.com/zjlx/"},
+    "cls_limit_review": {"name": "财联社涨停分析", "url": "https://www.cls.cn/"},
+    "stcn_databao": {"name": "证券时报·数据宝", "url": "https://www.stcn.com/"},
+    "previous_daily_data": {"name": "上一交易日daily-data.json", "url": null}
+  },
+  "assumptions": ["样例数据用于渲染和质检脚本测试，不代表正式复盘结论。"]
+}
