@@ -45,7 +45,7 @@ Routine reports should use exactly these four source families:
 3. 财联社
 4. 证券时报·数据宝
 
-Only add an extra source when one of the three public sources is unavailable or two fixed sources conflict on a key displayed number. When adding an extra source, write the reason in `数据来源与口径.md` and keep it out of the default workflow.
+Only add an extra source when one of the three public sources is unavailable or two fixed sources conflict on a key displayed number. When adding an extra source, write the reason in `数据来源与口径.md` and keep it out of the standard workflow.
 
 Prioritize dated pages whose publication date matches the report date. For a report date of `YYYY-MM-DD`, avoid accidentally using weekend commentary or the prior trading day.
 
@@ -121,6 +121,8 @@ limit_up:
     source_key:
 themes:
   concept_counts:
+    # Positive items shown in 领涨TOP must include both pct and up.
+    # pct drives the bar-end percentage label; up is shown only in the right 涨停家数 column.
   industry_counts:
 theme_interpretation:
   status:

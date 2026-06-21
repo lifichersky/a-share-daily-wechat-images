@@ -88,7 +88,7 @@ Validate every completed `daily-data.json` against [daily-data.schema.json](dail
     }
   },
   "themes": {
-    "concept_counts": [{"name": "PCB概念", "up": 4, "sample": 6, "口径": "题材概念口径"}],
+    "concept_counts": [{"name": "PCB概念", "pct": 4.59, "up": 4, "sample": 6, "口径": "题材概念口径"}],
     "industry_counts": [{"name": "通信", "pct": 4.59, "口径": "行业口径"}],
     "strong": ["通信", "电子", "CPO/光模块"],
     "weak": ["食品饮料", "医药生物", "非银金融"]
@@ -222,7 +222,7 @@ Selection rules:
 
 - Upside candidates: concept limit-up count top 3 and at least 5 stocks; or industry performance top 3 and above `+1%`; or has `板块龙头 / 容量中军 / 核心助攻`; or fixed sources clearly identify it as the active mainline.
 - Downside candidates: industry decline top 3 and below `-1.5%`; or sector capital outflow top 3; or includes down-limit, broken-board, or high-recognition negative feedback; or fixed sources state it is dragging the market.
-- Daily default: write 1 upside theme and 1 downside/negative-feedback theme. Use a second item only for a real dual-mainline or dual-risk structure. Hard maximum: at most 2 upside themes and at most 2 downside themes. Tie-break by core stock, capacity anchor, ladder evidence, then capital-flow evidence.
+- Daily default: identify the single hottest and most aggressive speculative theme as `upside[0]`; this is the only theme rendered in the image memo. Keep one downside/negative-feedback item only when it is important structured context for the report. Use a second supporting item only for a real dual-mainline or dual-risk structure. Hard maximum: at most 2 upside themes and at most 2 downside themes. Tie-break by core stock, capacity anchor, ladder evidence, then capital-flow evidence.
 - If no theme qualifies, set `status` to `no_clear_mainline` and explain rotation, dispersion, low-volume wait-and-see, retreat, or defensive shift.
 - `stage` should be a compact market-structure tag such as `新主线`, `老主线反抽`, `高位容量抱团`, `低位补涨试错`, `防御承接`, `权重护盘`, or `退潮负反馈`.
 - `core_judgment` must answer what the theme really is today, such as new mainline, rebound, crowding, low-level catch-up, defensive rotation, or retreat feedback.

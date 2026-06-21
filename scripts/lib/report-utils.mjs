@@ -365,6 +365,8 @@ export function validateDailyData(data, options = {}) {
     'limit_up.display口径',
     'limit_up.source_key',
     'limit_up.previous_day',
+    'themes.concept_counts',
+    'themes.industry_counts',
     'themes.strong',
     'themes.weak',
     'theme_interpretation',
@@ -379,6 +381,38 @@ export function validateDailyData(data, options = {}) {
     'assumptions'
   ]) {
     has(path);
+  }
+
+  const conceptCounts = Array.isArray(data.themes?.concept_counts) ? data.themes.concept_counts : [];
+  const industryCounts = Array.isArray(data.themes?.industry_counts) ? data.themes.industry_counts : [];
+  if (data.themes) {
+    if (!Array.isArray(data.themes.concept_counts)) {
+      errors.push('themes.concept_counts must be an array');
+    }
+    if (!Array.isArray(data.themes.industry_counts)) {
+      errors.push('themes.industry_counts must be an array');
+    }
+    if (!conceptCounts.length && !industryCounts.length) {
+      errors.push('themes must include at least one concept_counts or industry_counts item');
+    }
+    const hasGainerMetric = [...conceptCounts, ...industryCounts].some((item) => Number(item?.pct ?? 0) > 0);
+    const hasLoserMetric = [...conceptCounts, ...industryCounts].some((item) => Number(item?.pct ?? 0) < 0);
+    const conceptGainersMissingPct = conceptCounts
+      .filter((item) => {
+        const pct = item?.pct;
+        return Number(item?.up ?? 0) > 0 && (pct === null || pct === undefined || pct === '');
+      })
+      .map((item) => item?.name)
+      .filter(Boolean);
+    if (!hasGainerMetric) {
+      errors.push('themes must include positive numeric pct values for page 3 gainers');
+    }
+    if (conceptGainersMissingPct.length) {
+      errors.push(`themes.concept_counts positive up items must include pct for page 3 gainers: ${conceptGainersMissingPct.join(', ')}`);
+    }
+    if (!hasLoserMetric) {
+      errors.push('themes must include negative numeric pct values for page 3 losers');
+    }
   }
 
   const indexNames = new Set((data.indices ?? []).map((item) => item.name));

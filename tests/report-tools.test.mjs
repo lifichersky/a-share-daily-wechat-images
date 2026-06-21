@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import { THEMES, resolveTheme } from '../scripts/themes.mjs';
-import { renderReport, renderReportHtml } from '../scripts/render-report.mjs';
+import { renderReport, renderReportHtml, runBrowserPreflight } from '../scripts/render-report.mjs';
 import { validateSourceNotesText } from '../scripts/validate-report.mjs';
 import * as reportUtils from '../scripts/lib/report-utils.mjs';
 
@@ -33,6 +33,79 @@ test('sample daily data passes required report validation', async () => {
   const result = validateDailyData(data);
   assert.deepEqual(result.errors, []);
   assert.equal(result.warnings.length, 0);
+});
+
+test('page 3 renders concept gainers with pct bars and limit-up counts', async () => {
+  const data = await loadSample();
+  const validation = validateDailyData(data);
+  assert.deepEqual(validation.errors, []);
+  assert.equal(validation.warnings.length, 0);
+
+  const html = renderReportHtml(data);
+  assert.doesNotMatch(html, /当日无明显领涨题材/);
+  assert.doesNotMatch(html, /当日无明显领跌题材/);
+  assert.match(html, /题材概念口径/);
+  assert.match(html, /涨停家数/);
+  assert.match(html, /<i>涨幅<\/i>/);
+  assert.match(html, /电力/);
+  assert.match(html, /\+5\.2%/);
+  assert.match(html, /<em>8<\/em>/);
+});
+
+test('validation rejects concept gainers that have limit-up count but no pct value', async () => {
+  const data = await loadSample();
+  data.themes.concept_counts = [
+    { name: 'PCB概念', pct: null, up: 26, 口径: '题材概念口径' },
+    { name: '通信设备/CPO/光模块', pct: null, up: 26, 口径: '题材概念口径' },
+    { name: '机械设备', pct: null, up: 19, 口径: '题材概念口径' },
+    { name: '有色金属', pct: null, up: 14, 口径: '题材概念口径' },
+    { name: '元器件/MLCC/铜箔/电子布', pct: 10.31, up: 13, 口径: '题材概念口径' },
+    { name: '煤炭概念', pct: -3.19, 口径: '题材概念口径' },
+    { name: '油气设服', pct: -2.45, 口径: '题材概念口径' }
+  ];
+  data.themes.industry_counts = [
+    { name: '电子元件', pct: 6.98, 口径: '行业口径' },
+    { name: '电子化学品', pct: 6.68, 口径: '行业口径' }
+  ];
+
+  const validation = validateDailyData(data);
+  assert.match(validation.errors.join('\n'), /positive up items must include pct/);
+  assert.match(validation.errors.join('\n'), /PCB概念/);
+});
+
+test('page 3 gainer bar-end labels are percentages while limit-up count stays in the right column', async () => {
+  const data = await loadSample();
+  data.themes.concept_counts = [
+    { name: 'PCB概念', pct: 6.98, up: 26, 口径: '题材概念口径' },
+    { name: '通信设备/CPO/光模块', pct: 6.32, up: 26, 口径: '题材概念口径' },
+    { name: '机械设备', pct: 3.18, up: 19, 口径: '题材概念口径' },
+    { name: '有色金属', pct: 2.76, up: 14, 口径: '题材概念口径' },
+    { name: '元器件/MLCC/铜箔/电子布', pct: 10.31, up: 13, 口径: '题材概念口径' },
+    { name: '煤炭概念', pct: -3.19, 口径: '题材概念口径' },
+    { name: '油气设服', pct: -2.45, 口径: '题材概念口径' }
+  ];
+
+  const html = renderReportHtml(data);
+  assert.match(html, /PCB概念/);
+  assert.match(html, /通信设备\/CPO\/光模块/);
+  assert.match(html, /机械设备/);
+  assert.match(html, /有色金属/);
+  assert.match(html, /元器件\/MLCC\/铜箔\/电子布/);
+  assert.match(html, /<i>涨幅<\/i>/);
+  assert.match(html, />\+10\.3%<\/u>/);
+  assert.match(html, />\+7\.0%<\/u>/);
+  assert.doesNotMatch(html, />26只<\/u>/);
+  assert.match(html, /<em>26<\/em>/);
+  assert.match(html, /\+10\.3%/);
+});
+
+test('validation rejects page 3 theme bars with no usable gainers or losers metric', async () => {
+  const data = await loadSample();
+  data.themes.concept_counts = data.themes.concept_counts.map(({ pct, up, ...item }) => item);
+  data.themes.industry_counts = data.themes.industry_counts.map(({ pct, ...item }) => item);
+  const result = validateDailyData(data);
+  assert.match(result.errors.join('\n'), /must include positive numeric pct values/);
+  assert.match(result.errors.join('\n'), /must include negative numeric pct values/);
 });
 
 test('sample daily data passes machine JSON Schema validation', async () => {
@@ -177,23 +250,101 @@ test('renderer applies the approved magazine cover treatment to page 1', async (
   assert.match(html, /width: 1080px/);
 });
 
+test('dark editorial page 1 market judgment fits long headline and detail copy', async () => {
+  const data = await loadSample();
+  data.market_summary.headline = '放量重返4000点 · 有色/航天/券商三线高低切换 · 高位AI硬件大幅失血';
+  data.market_summary.style_shift = '资金从高位半导体材料/AI硬件/通信大票大幅撤出，集体涌向有色金属/小金属/商业航天/大金融/锂电池等低位方向。';
+
+  const html = renderReportHtml(data);
+
+  assert.match(html, /class="de-judgement-body" data-fit/);
+  assert.match(html, /class="de-headline" data-fit/);
+  assert.match(html, /资金从高位半导体材料\/AI硬件\/通信大票大幅撤出/);
+  assert.match(html, /\.de-judgement-body \{[^}]*top: 58px; bottom: 18px;[^}]*justify-content: center;[^}]*align-items: center;[^}]*gap: var\(--de-judgement-gap, 8px\);/);
+  assert.match(html, /\.de-headline-chip \{[^}]*font-size: var\(--de-headline-size, 36px\);[^}]*line-height: 1\.08;[^}]*overflow-wrap: anywhere;[^}]*word-break: break-word;/);
+  assert.match(html, /\.de-judgement p \{[^}]*font-size: var\(--de-detail-size, 18px\);[^}]*line-height: 1\.32;[^}]*overflow-wrap: anywhere;[^}]*word-break: break-word;/);
+  assert.match(html, /fitDarkEditorialJudgement/);
+  assert.match(runBrowserPreflight.toString(), /\.de-judgement-body/);
+  assert.match(runBrowserPreflight.toString(), /criticalOverflow[\s\S]*\.de-judgement-body/);
+});
+
+test('dark editorial page 2 signal cards wrap primary long signals without ellipsis', async () => {
+  const data = await loadSample();
+  data.next_session_signals = {
+    确认信号: [
+      '洛阳钼业/铜陵有色次日继续放量承接，有色行业主线保持扩散',
+      '券商/商业航天低位分支继续出现首板补涨并维持封单',
+      '第三条多头信号保留在JSON但不挤入图片'
+    ],
+    弱化信号: ['中位接力票继续放量分歧且补涨断层'],
+    风险信号: [
+      '高位AI硬件/通信大票继续大规模失血并带动有色/商业航天同步回落',
+      '新易盛/亨通光电/中兴通讯次日继续放量下杀并触发科技容量负反馈',
+      '第三条空头信号保留在JSON但不挤入图片'
+    ]
+  };
+
+  const html = renderReportHtml(data);
+
+  assert.match(html, /洛阳钼业\/铜陵有色次日继续放量承接/);
+  assert.match(html, /新易盛\/亨通光电\/中兴通讯次日继续放量下杀/);
+  assert.doesNotMatch(html, /第三条多头信号保留在JSON但不挤入图片/);
+  assert.doesNotMatch(html, /第三条空头信号保留在JSON但不挤入图片/);
+  assert.match(html, /\.de-signal-card li \{[^}]*white-space: normal;[^}]*overflow-wrap: anywhere;[^}]*word-break: break-word;/);
+  assert.doesNotMatch(html, /\.de-signal-card li \{[^}]*text-overflow: ellipsis;/);
+});
+
 test('renderer uses A-share color semantics: red bullish and green bearish', async () => {
   const data = await loadSample();
   const html = renderReportHtml(data);
   assert.match(html, /<strong class="bearish">4068\.57<\/strong>/);
-  assert.match(html, /background: linear-gradient\(180deg,#ff5252,#cf2d2e\)/);
-  assert.match(html, /background: linear-gradient\(180deg,#21bd8c,#0d8a68\)/);
+  assert.match(html, /background: linear-gradient\(90deg,#ff7068 0%,#f03535 45%,#b51b1b 100%\)/);
+  assert.match(html, /background: linear-gradient\(90deg,#0c8a68 0%,#1ab47b 55%,#4cd6a3 100%\)/);
   assert.doesNotMatch(html, /class="metric-value down"/);
 });
 
-test('renderer keeps page 4 dense with all role groups, ladder, and next-session judgment', async () => {
+test('renderer keeps page 4 focused on six market-defining role groups, ladder, and next-session judgment', async () => {
   const data = await loadSample();
   const html = renderReportHtml(data);
-  for (const heading of ['空间龙', '板块龙头', '容量中军', '核心助攻', '中位接力', '补涨前排', '首板前排', '风险负反馈']) {
+  for (const heading of ['空间龙', '板块龙头', '容量中军', '核心助攻', '中位接力', '风险负反馈']) {
     assert.match(html, new RegExp(heading));
   }
+  assert.doesNotMatch(html, />补涨前排</);
+  assert.doesNotMatch(html, />首板前排</);
   assert.match(html, /连板梯队/);
   assert.match(html, /次日梯队判断/);
+});
+
+test('dark editorial page 4 gives next-session ladder judgment enough room and flags clipping', async () => {
+  const data = await loadSample();
+  data.next_session_signals = {
+    确认信号: ['中际旭创/新易盛/生益科技次日继续放量承接，AI硬件行业主力净流入维持百亿以上'],
+    弱化信号: ['成交额跌破2.8万亿且千亿科技权重冲高回落，连板中位股补涨断层'],
+    风险信号: ['宿迁联盛/和远气体断板后继续大跌，引发高位股份反馈扩散']
+  };
+
+  const html = renderReportHtml(data);
+
+  assert.match(html, /中际旭创\/新易盛\/生益科技次日继续放量承接/);
+  assert.match(html, /\.de-roles-panel \{ left: 26px; right: 26px; top: 716px; height: 396px;/);
+  assert.match(html, /\.de-watch-panel \{ left: 26px; right: 26px; top: 1126px; height: 208px;/);
+  assert.match(html, /\.de-watch-card \{[^}]*min-height: 0;[^}]*padding: 12px 16px;[^}]*overflow: hidden;/);
+  assert.match(html, /\.de-watch-card p \{[^}]*font-size: 16px;[^}]*line-height: 1\.38;[^}]*overflow-wrap: anywhere;[^}]*word-break: break-word;/);
+  assert.match(runBrowserPreflight.toString(), /\.de-watch-card/);
+  assert.match(runBrowserPreflight.toString(), /criticalOverflow[\s\S]*\.de-watch-card/);
+  assert.match(runBrowserPreflight.toString(), /footer overlap/);
+  assert.match(runBrowserPreflight.toString(), /footerOverlapCandidates/);
+});
+
+test('dark editorial role rows keep stock names on one line and align descriptions', async () => {
+  const data = await loadSample();
+  const html = renderReportHtml(data);
+  assert.match(html, /\.leader-row \{ display: grid; grid-template-columns: 5\.2em minmax\(0, 1fr\);/);
+  assert.match(html, /\.leader-row b \{[^}]*white-space: nowrap;[^}]*overflow: visible;/);
+  assert.match(html, /\.leader-row span \{ min-width: 0; \}/);
+  assert.match(html, /\.leader-row em \{[^}]*font-size: 17px;[^}]*font-weight: 800;/);
+  assert.match(html, /<em>5板<\/em> 地产/);
+  assert.match(html, /<em>容量<\/em> 通信/);
 });
 
 test('renderer shows previous-day ladder comparisons on page 4 top metrics', async () => {
@@ -213,8 +364,8 @@ test('renderer shows previous-day ladder comparisons on page 4 top metrics', asy
   assert.match(html, /较昨 -1板/);
   assert.match(html, /昨日 16只/);
   assert.match(html, /较昨 -5只/);
-  assert.match(html, /class="metric-compare bearish" data-fit>昨日 6板 · 较昨 -1板<\/div>/);
-  assert.match(html, /class="metric-compare bearish" data-fit>昨日 16只 · 较昨 -5只<\/div>/);
+  assert.match(html, /class="metric-compare bearish" data-fit><span class="metric-compare-prev">昨日 6板<\/span><span class="metric-compare-delta">较昨 -1板<\/span><\/div>/);
+  assert.match(html, /class="metric-compare bearish" data-fit><span class="metric-compare-prev">昨日 16只<\/span><span class="metric-compare-delta">较昨 -5只<\/span><\/div>/);
 });
 
 test('schema requires previous-day ladder comparison data', async () => {
@@ -253,14 +404,18 @@ test('renderer shows previous-day limit-up comparisons on page 3 top metrics', a
     url: null
   };
   const html = renderReportHtml(data);
-  assert.match(html, /昨日 63只 · 较昨 -14只/);
-  assert.match(html, /昨日 21只 · 较昨 \+38只/);
-  assert.match(html, /昨日 42只 · 较昨 -5只/);
-  assert.match(html, /昨日 60% · 较昨 -4pct/);
-  assert.match(html, /class="metric-compare bearish" data-fit>昨日 63只 · 较昨 -14只<\/div>/);
-  assert.match(html, /class="metric-compare bearish" data-fit>昨日 21只 · 较昨 \+38只<\/div>/);
-  assert.match(html, /class="metric-compare bullish" data-fit>昨日 42只 · 较昨 -5只<\/div>/);
-  assert.match(html, /class="metric-compare bearish" data-fit>昨日 60% · 较昨 -4pct<\/div>/);
+  assert.match(html, /昨日 63只/);
+  assert.match(html, /较昨 -14只/);
+  assert.match(html, /昨日 21只/);
+  assert.match(html, /较昨 \+38只/);
+  assert.match(html, /昨日 42只/);
+  assert.match(html, /较昨 -5只/);
+  assert.match(html, /昨日 60%/);
+  assert.match(html, /较昨 -4pct/);
+  assert.match(html, /class="metric-compare bearish" data-fit><span class="metric-compare-prev">昨日 63只<\/span><span class="metric-compare-delta">较昨 -14只<\/span><\/div>/);
+  assert.match(html, /class="metric-compare bearish" data-fit><span class="metric-compare-prev">昨日 21只<\/span><span class="metric-compare-delta">较昨 \+38只<\/span><\/div>/);
+  assert.match(html, /class="metric-compare bullish" data-fit><span class="metric-compare-prev">昨日 42只<\/span><span class="metric-compare-delta">较昨 -5只<\/span><\/div>/);
+  assert.match(html, /class="metric-compare bearish" data-fit><span class="metric-compare-prev">昨日 60%<\/span><span class="metric-compare-delta">较昨 -4pct<\/span><\/div>/);
 });
 
 test('schema requires previous-day limit-up comparison data', async () => {
@@ -290,7 +445,7 @@ test('renderer includes chart-like visual components for dense information scann
   const data = await loadSample();
   const html = renderReportHtml(data);
   assert.match(html, /class="sentiment-dial"/);
-  assert.match(html, /class="theme-bars"/);
+  assert.match(html, /class="theme-bars /);
   assert.match(html, /de-ladder-strip/);
 });
 
@@ -307,8 +462,10 @@ test('renderer shows all emotion factors with risk-control labels', async () => 
 test('renderer explains score bands instead of model confidence on page 2', async () => {
   const data = await loadSample();
   const html = renderReportHtml(data);
-  assert.match(html, /情绪分=10项因子加总/);
-  assert.match(html, /0-24冰点/);
+  assert.match(html, /情绪极致 · 追高风险大/);
+  assert.match(html, /0-24/);
+  assert.match(html, /\.de-dial-bands \.band i \{[^}]*font-size: 21px;[^}]*font-weight: 800;/);
+  assert.match(html, /\.de-dial-bands \.band p \{[^}]*font-size: 18px;/);
   assert.doesNotMatch(html, /confidence:/);
 });
 
@@ -327,26 +484,35 @@ test('emotion dial color follows state bands', async () => {
   assert.match(html, /class="dial-ring warning"/);
 });
 
-test('page 3 renders theme deep dive as investment memo v2 instead of four-line fill-ins', async () => {
+test('page 3 renders only the strongest hot theme as investment memo v2', async () => {
   const data = await loadSample();
   data.theme_interpretation = {
     status: 'both',
     upside: [
       {
-        name: '电力',
+        name: '超强主线A',
         stage: '防御承接',
-        core_judgment: '电力不是单纯补涨，而是分歧日资金从高波动科技切出的低位承接方向',
-        narrative: '指数放量分歧时，能源安全和公用事业的低波动属性被重新定价；题材涨停8只且华电能源、粤电力A维持梯队，说明资金在高位科技兑现后寻找可容纳分歧的防御主线。',
+        core_judgment: '超强主线A不是单纯补涨，而是分歧日资金从高波动科技切出的低位承接方向',
+        narrative: '指数放量分歧时，低波动属性被重新定价；题材涨停8只且核心股维持梯队，说明资金在高位兑现后寻找可容纳分歧的防御主线。',
         confirm_signal: '华电能源或粤电力A继续晋级，并带动首板补涨扩散',
         invalidate_signal: '高标断板后后排同步掉队，防御承接退化为一日轮动',
         source_keys: ['stcn_databao', 'cls_limit_review']
+      },
+      {
+        name: '备选主线B',
+        stage: '低位补涨试错',
+        core_judgment: '备选主线B仍是次强分支',
+        narrative: '它具备一定涨停数量，但容量锚和梯队完整度弱于第一主线。',
+        confirm_signal: '容量核心放量确认',
+        invalidate_signal: '后排补涨减少',
+        source_keys: ['cls_limit_review']
       }
     ],
     downside: [
       {
-        name: '半导体',
+        name: '风险线C',
         stage: '高位退潮负反馈',
-        core_judgment: '半导体的下跌是前期成长拥挤交易的兑现，不只是行业单日走弱',
+        core_judgment: '风险线C的下跌是前期拥挤交易的兑现，不只是行业单日走弱',
         narrative: '行业跌幅居前叠加电子/半导体主力资金大额流出，说明高景气成长线从主动进攻切换到筹码释放；如果容量核心不能止跌，科技线会继续压制指数风险偏好。',
         confirm_signal: '容量核心缩量企稳，跌幅榜不再被半导体扩散占据',
         invalidate_signal: '核心股继续放量下杀并带动光学光电子、设备链补跌',
@@ -356,10 +522,10 @@ test('page 3 renders theme deep dive as investment memo v2 instead of four-line 
   };
   const html = renderReportHtml(data);
   assert.match(html, /题材深读/);
-  assert.match(html, /主线炒作解读/);
-  assert.match(html, /领跌负反馈解读/);
-  assert.match(html, /本质判断/);
-  assert.match(html, /来龙去脉/);
+  assert.match(html, /最强炒作题材深读/);
+  assert.match(html, /超强主线A/);
+  assert.doesNotMatch(html, /备选主线B/);
+  assert.doesNotMatch(html, /风险线C/);
   assert.match(html, /确认/);
   assert.match(html, /证伪/);
   assert.match(html, /防御承接/);
@@ -370,6 +536,25 @@ test('page 3 renders theme deep dive as investment memo v2 instead of four-line 
   assert.doesNotMatch(html, /<h2 data-fit>高度<\/h2>/);
   assert.doesNotMatch(html, /<h2 data-fit>广度<\/h2>/);
   assert.doesNotMatch(html, /<h2 data-fit>风险<\/h2>/);
+});
+
+test('page 3 deep dive compacts long analysis for image-safe rendering', async () => {
+  const data = await loadSample();
+  data.theme_interpretation.upside[0].core_judgment = '长文本主线不是普通反抽，而是弱势盘面里资金集中抱团的方向';
+  data.theme_interpretation.upside[0].narrative = [
+    '第一句说明主线的资金选择逻辑和盘面位置。',
+    '第二句继续解释连板梯队、容量中军和首板扩散之间的关系。',
+    '第三句补充资金流和昨日对比，但图片不应该为了塞满所有原文而裁断确认信号。',
+    '第四句继续补充很多很多很多很多很多很多很多很多很多很多很多很多很多很多很多很多很多很多很多很多很多很多很多很多很多很多很多很多细节。',
+    '第五句继续补充更多更多更多更多更多更多更多更多更多更多更多更多更多更多更多更多更多更多更多更多更多更多更多更多更多更多更多更多细节。',
+    '尾部不应显示'
+  ].join('');
+  const html = renderReportHtml(data);
+  assert.match(html, /长文本主线/);
+  assert.match(html, /…/);
+  assert.match(html, /确认/);
+  assert.match(html, /证伪/);
+  assert.doesNotMatch(html, /尾部不应显示/);
 });
 
 test('schema accepts theme interpretation v2 and caps each side at two themes', async () => {
@@ -466,14 +651,103 @@ test('page 1 market status colors volume change and breadth counts with A-share 
   data.breadth.up = 3776;
   data.breadth.down = 1682;
   let html = renderReportHtml(data);
-  assert.match(html, /<strong class="bearish">较上日缩量约4443亿<\/strong>/);
+  assert.match(html, /<em class="de-money-change bearish" data-fit>较昨日 缩量约4443亿<\/em>/);
   assert.match(html, /<strong class="bullish">3776<\/strong>/);
   assert.match(html, /<strong class="bearish">1682<\/strong>/);
 
   data.turnover.change_text = '较上日放量约3500亿';
   data.turnover.change_yuan = 350000000000;
   html = renderReportHtml(data);
-  assert.match(html, /<strong class="bullish">较上日放量约3500亿<\/strong>/);
+  assert.match(html, /<em class="de-money-change bullish" data-fit>较昨日 放量约3500亿<\/em>/);
+});
+
+test('light page 1 breadth footer keeps only ratio and limit counts', async () => {
+  const data = await loadSample();
+  data.theme = '浅色机构午报风格';
+  data.breadth.up = 3923;
+  data.breadth.down = 1515;
+  data.breadth.ratio_text = '';
+  data.breadth.notable = '超3900只个股上涨，涨跌比约72:28';
+  const html = renderReportHtml(data, { theme: '浅色机构午报风格' });
+  const match = html.match(/<div class="li-breadth-foot">([\s\S]*?)<\/div>/);
+  assert.ok(match);
+  assert.match(match[1], /涨跌比\s*3923:1515/);
+  assert.match(match[1], /涨停/);
+  assert.match(match[1], /跌停/);
+  assert.doesNotMatch(match[1], /超3900/);
+  assert.equal((match[1].match(/<span>/g) ?? []).length, 3);
+});
+
+test('dark terminal page 1 breadth description stays below bar without crowding', async () => {
+  const data = await loadSample();
+  data.theme = '深色终端杂志风格';
+  data.breadth.up = 1720;
+  data.breadth.down = 3732;
+  data.breadth.ratio_text = '涨跌比 --';
+  data.breadth.notable = '上涨占比仅31.5%，超3700只个股下跌，指数涨个股跌背离创近期新高';
+  data.limit_up.limit_up = 86;
+  data.limit_up.limit_down = 1;
+
+  const html = renderReportHtml(data, { theme: '深色终端杂志风格' });
+
+  assert.match(html, /<div class="dt-breadth-foot" data-fit>/);
+  assert.match(html, /class="dt-breadth-note" data-fit/);
+  assert.match(html, /上涨占比仅31\.5/);
+  assert.match(html, /\.dt-breadth-bar \{[^}]*top: 118px; height: 34px;/);
+  assert.match(html, /\.dt-breadth-foot \{[^}]*top: 164px; height: 80px;[^}]*font-size: 17px;[^}]*overflow: hidden;/);
+  assert.match(html, /\.dt-breadth-foot \.dt-breadth-note \{[^}]*-webkit-line-clamp: 3;[^}]*overflow-wrap: anywhere;[^}]*word-break: break-word;/);
+});
+
+test('light page 2 score ring contains only score and shows cycle below', async () => {
+  const data = await loadSample();
+  data.theme = '浅色机构午报风格';
+  data.emotion_model_v1.score = 68;
+  data.emotion_model_v1.state = '分歧修复初期';
+  const html = renderReportHtml(data, { theme: '浅色机构午报风格' });
+  const page2 = html.match(/<section class="poster li-poster li-page2"[\s\S]*?<section class="li-panel li-factor-panel">/);
+  assert.ok(page2);
+  assert.match(page2[0], /<div class="li-score-ring bullish-soft"[^>]*>\s*<span>68<\/span>\s*<\/div>/);
+  assert.match(page2[0], /<strong class="bullish-soft" data-fit>分歧修复初期<\/strong>/);
+  assert.match(page2[0], /当前情绪周期/);
+  const ringMarkup = page2[0].match(/<div class="li-score-ring[\s\S]*?<\/div>/)?.[0] ?? '';
+  assert.doesNotMatch(ringMarkup, /分歧修复初期|\/100|85\+ 高潮|70-84 扩散/);
+});
+
+test('light page 3 keeps display口径 out of hero and at metric bottom', async () => {
+  const data = await loadSample();
+  data.theme = '浅色机构午报风格';
+  data.limit_up.display口径 = '非ST短线口径';
+  const html = renderReportHtml(data, { theme: '浅色机构午报风格' });
+  const page3 = html.match(/<section class="poster li-poster li-page3"[\s\S]*?<section class="li-panel li-theme-panel">/);
+  assert.ok(page3);
+  const hero = page3[0].match(/<section class="li-hero li-hero-page3">([\s\S]*?)<\/section>/)?.[1] ?? '';
+  assert.doesNotMatch(hero, /展示口径|非ST短线口径/);
+  const limitUpCard = page3[0].match(/<div class="li-metric-box bullish">([\s\S]*?)<\/div>\s*<div class="li-metric-box bearish">/)?.[1] ?? '';
+  assert.match(limitUpCard, /<strong>127<\/strong>|<strong>89<\/strong>|<strong>\d+<\/strong>/);
+  assert.ok(limitUpCard.indexOf('metric-compare') < limitUpCard.indexOf('非ST短线口径'));
+});
+
+test('light page 4 reserves vertical gaps between lower panels and footer', async () => {
+  const data = await loadSample();
+  data.theme = '浅色机构午报风格';
+  const html = renderReportHtml(data, { theme: '浅色机构午报风格' });
+  assert.match(html, /\.li-ladder-head \{ left: 34px; right: 34px; top: 250px; height: 242px;/);
+  assert.match(html, /\.li-ladder-card \{[^}]*padding: 12px 24px;[^}]*min-height: 0;/);
+  assert.match(html, /\.li-ladder-strip \{ left: 34px; right: 34px; top: 510px; height: 242px;/);
+  assert.match(html, /\.li-ladder-rows \{[^}]*grid-template-rows: repeat\(4, minmax\(0, 1fr\)\);[^}]*gap: 6px;[^}]*min-height: 0;/);
+  assert.match(html, /\.li-ladder-row \{[^}]*grid-template-columns: 74px minmax\(0, 1fr\);[^}]*min-height: 0;/);
+  assert.match(runBrowserPreflight.toString(), /\.li-ladder-rows/);
+  assert.match(runBrowserPreflight.toString(), /criticalOverflow[\s\S]*\.li-ladder-rows/);
+  assert.match(html, /\.li-roles-panel \{ left: 34px; right: 34px; top: 768px; height: 364px;/);
+  assert.match(html, /\.li-watch-panel \{ left: 34px; right: 34px; top: 1150px; height: 190px;/);
+  assert.match(html, /<span class="li-section-icon metrics">/);
+  assert.match(html, /<span class="li-section-icon ladder">/);
+  assert.match(html, /<span class="li-section-icon roles">/);
+  assert.match(html, /<span class="li-section-icon watch">/);
+  assert.match(html, /\.li-watch-grid p \{[^}]*font-size: 14px;[^}]*-webkit-line-clamp: 4;/);
+  assert.match(html, /\.leader-row \{ display: grid; grid-template-columns: 5\.2em minmax\(0, 1fr\);/);
+  assert.match(html, /\.leader-row b \{[^}]*white-space: nowrap;[^}]*overflow: visible;/);
+  assert.match(html, /\.leader-row span \{[^}]*white-space: nowrap;[^}]*text-overflow: ellipsis;/);
 });
 
 test('seal rate color follows A-share risk-control semantics', async () => {

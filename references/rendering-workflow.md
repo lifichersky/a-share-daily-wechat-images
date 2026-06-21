@@ -94,14 +94,15 @@ const hasOverflow =
 The 8px tolerance absorbs browser font and subpixel rounding noise. It must not be used to ignore visibly clipped or overlapping text.
 
 5. No visible text-bearing element is outside the poster safe area.
-6. Footer text fits within the footer zone.
+6. Content panels/cards must not overlap the footer/source line.
+7. Footer text fits within the footer zone.
 
 If any check fails, stop export and report:
 
 - page number,
 - selector,
 - element text snippet,
-- overflow direction or safe-area violation.
+- overflow direction, safe-area violation, or footer overlap.
 
 Do not export PNGs after a failed preflight.
 

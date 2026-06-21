@@ -8,7 +8,7 @@ Default rendering is deterministic HTML/CSS. Do not call image generation for th
 
 The skill ships three independent visual themes. Each theme has its own self-contained HTML rendering function and CSS (no shared design tokens), and replicates the visual style of the corresponding midday report theme. Choose by reader mood: magazine drama, institutional report, or terminal tape.
 
-Default theme: `暗金杂志封面风格`. The skill does not fall back to a fourth style; the user must pick from the three.
+There is no default theme. The skill does not fall back to a fourth style; the user must explicitly pick from the three themes before rendering.
 
 ### 暗金杂志封面风格
 
@@ -71,7 +71,7 @@ These rules apply to every theme and override any per-theme styling:
 
 ## Background Rule
 
-Default themes must be pure CSS backgrounds.
+Built-in themes must use pure CSS backgrounds.
 
 Allowed:
 
@@ -80,7 +80,7 @@ Allowed:
 - subtle paper or satin-like tonal variation,
 - shadows and highlights that support content separation.
 
-Forbidden in default themes:
+Forbidden in built-in themes:
 
 - grid backgrounds,
 - repeated-line backgrounds,

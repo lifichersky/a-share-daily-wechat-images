@@ -25,6 +25,8 @@ import {
 
 const require = createRequire(import.meta.url);
 
+const DISPLAY_LEADER_ROLE_KEYS = ['空间龙', '板块龙头', '容量中军', '核心助攻', '中位接力', '风险负反馈'];
+
 function parseArgs(argv) {
   const args = { htmlOnly: false };
   for (let i = 0; i < argv.length; i += 1) {
@@ -97,7 +99,7 @@ function roleItems(items, limit = 4) {
     return `
       <div class="leader-row" data-fit>
         <b>${escapeHtml(item.name)}</b>
-        <span>${board}${escapeHtml(item.theme ?? '')}</span>
+        <span>${board} ${escapeHtml(item.theme ?? '')}</span>
       </div>
     `;
   }).join('');
@@ -134,6 +136,16 @@ function volumeChangeClass(turnover) {
   return 'neutral';
 }
 
+function turnoverChangeText(turnover) {
+  const text = String(turnover?.change_text ?? '').trim();
+  if (text) return text.replace(/^较(?:上日|昨日)\s*/, '较昨日 ');
+  const n = Number(turnover?.change_yuan);
+  if (!Number.isFinite(n)) return '';
+  if (n === 0) return '较昨日 持平';
+  const amount = Math.round(Math.abs(n) / 100000000);
+  return `较昨日 ${n > 0 ? '放量' : '缩量'}${amount}亿`;
+}
+
 function breadthLine(breadth) {
   return `${escapeHtml(breadth?.notable)}，上涨 <b class="bullish">${escapeHtml(breadth?.up)}</b> 家 / 下跌 <b class="bearish">${escapeHtml(breadth?.down)}</b> 家。`;
 }
@@ -151,27 +163,70 @@ function flowPills(items, limit = 4) {
   `;
 }
 
+function hasFiniteNumericField(item, key) {
+  const value = item?.[key];
+  return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+}
+
+function hasNumericPct(item) {
+  return hasFiniteNumericField(item, 'pct');
+}
+
+function hasNumericUp(item) {
+  return hasFiniteNumericField(item, 'up');
+}
+
+function positiveGainerMetric(item) {
+  const pct = Number(item?.pct);
+  if (Number.isFinite(pct) && pct > 0) {
+    return { value: pct, sortValue: pct, text: `+${pct.toFixed(1)}%` };
+  }
+  return null;
+}
+
+function themeGainerItems(data) {
+  const conceptCounts = data.themes?.concept_counts ?? [];
+  const industryCounts = data.themes?.industry_counts ?? [];
+  return conceptCounts.some(positiveGainerMetric) ? conceptCounts : industryCounts;
+}
+
+function themeLoserItems(data) {
+  const conceptCounts = data.themes?.concept_counts ?? [];
+  const industryCounts = data.themes?.industry_counts ?? [];
+  return conceptCounts.some((item) => Number(item?.pct ?? 0) < 0) ? conceptCounts : industryCounts;
+}
+
+function themeGainerCaption(items) {
+  return (items ?? []).some((item) => String(item?.['口径'] ?? '').includes('题材')) ? '题材概念口径' : '涨幅口径';
+}
+
+function themeLoserCaption(items) {
+  return (items ?? []).some((item) => String(item?.['口径'] ?? '').includes('题材')) ? '题材概念口径' : '跌幅口径';
+}
+
 function topGainersThemeBars(items, limit = 5) {
-  // 领涨题材 - 固定 5 行布局：题材 / 涨幅(条形+数值) / 涨停数，三列均显示列标题
+  // 领涨题材 - 固定 5 行布局：题材 / 涨幅(条形+数值) / 涨停家数，三列均显示列标题
   // 行号对齐：始终渲染 5 行 + 列标题行，不足 5 条时显示占位条 + 列名占位
-  const source = (items ?? []).filter((item) => Number(item.pct ?? 0) > 0);
+  const source = (items ?? [])
+    .map((item) => ({ item, metric: positiveGainerMetric(item) }))
+    .filter((entry) => entry.metric);
   const list = source
     .slice()
-    .sort((a, b) => Number(b.pct) - Number(a.pct))
+    .sort((a, b) => b.metric.sortValue - a.metric.sortValue)
     .slice(0, limit);
-  const maxPct = Math.max(...list.map((item) => Math.abs(Number(item.pct ?? 0))), 1);
+  const maxValue = Math.max(...list.map((entry) => Math.abs(entry.metric.sortValue)), 1);
 
   const header = `
     <div class="theme-bar-row theme-bar-header">
       <span>题材</span>
       <i>涨幅</i>
-      <em>涨停数</em>
+      <em>涨停家数</em>
     </div>
   `;
 
   const dataRows = Array.from({ length: limit }, (_, idx) => {
-    const item = list[idx];
-    if (!item) {
+    const entry = list[idx];
+    if (!entry) {
       // 占位行：保留列名占位，条形空，颜色淡化
       return `
         <div class="theme-bar-row theme-bar-placeholder">
@@ -181,14 +236,15 @@ function topGainersThemeBars(items, limit = 5) {
         </div>
       `;
     }
-    const pct = Number(item.pct ?? 0);
-    const up = Number(item.up ?? 0);
-    const width = clamp(Math.round((Math.abs(pct) / maxPct) * 100), 14, 100);
+    const { item, metric } = entry;
+    const up = Number(item.up);
+    const thirdColumnText = Number.isFinite(up) ? String(item.up) : '--';
+    const width = clamp(Math.round((Math.abs(metric.sortValue) / maxValue) * 100), 14, 100);
     return `
       <div class="theme-bar-row theme-bar bullish" data-fit>
         <span>${escapeHtml(item.name)}</span>
-        <i class="bar-track" style="--bar-width:${width}%"><b></b><u>+${pct.toFixed(1)}%</u></i>
-        <em>${escapeHtml(String(up))}</em>
+        <i class="bar-track" style="--bar-width:${width}%"><b></b><u>${escapeHtml(metric.text)}</u></i>
+        <em>${escapeHtml(thirdColumnText)}</em>
       </div>
     `;
   }).join('');
@@ -368,9 +424,34 @@ function buildIntegratedAnalysis(item) {
   return core || narrative || '';
 }
 
+function visibleLength(text) {
+  return Array.from(String(text ?? '')).length;
+}
+
+function compactTextAtSentence(text, maxChars) {
+  const source = String(text ?? '').replace(/\s+/g, '').trim();
+  if (visibleLength(source) <= maxChars) return source;
+  const chunks = source.match(/[^。；;！!？?\n]+[。；;！!？?]?/g) ?? [source];
+  let result = '';
+  for (const chunk of chunks) {
+    if (visibleLength(result + chunk) > maxChars) break;
+    result += chunk;
+  }
+  if (!result) {
+    result = Array.from(source).slice(0, Math.max(0, maxChars - 1)).join('');
+  }
+  return `${result.replace(/[，,、；;：:。.\s]+$/, '')}…`;
+}
+
+function themeToneFromItem(item) {
+  const text = `${item?.stage ?? ''}${item?.core_judgment ?? ''}${item?.narrative ?? ''}`;
+  if (/退潮|兑现|杀跌|负反馈|下跌|补跌|风险|拖累/.test(text)) return 'bearish';
+  return 'bullish';
+}
+
 function themeDeepDiveItem(item, tone, compact = false) {
   const title = item?.name ?? item?.stage ?? '题材状态';
-  const analysis = buildIntegratedAnalysis(item);
+  const analysis = compactTextAtSentence(buildIntegratedAnalysis(item), compact ? 130 : 240);
   if (compact) {
     return `
       <article class="deep-dive-item compact ${tone}">
@@ -410,19 +491,18 @@ function themeDeepDiveSections(themeInterpretation) {
       items: source.no_clear_mainline ? [source.no_clear_mainline] : []
     }];
   }
-  const sections = [];
-  const topUpside = (source.upside ?? [])[0];
-  if (topUpside) {
-    sections.push({ title: '涨停集中题材逻辑', tone: 'bullish', items: [topUpside] });
+  const primaryUpside = (source.upside ?? [])[0];
+  if (primaryUpside) {
+    return [{ title: '最强炒作题材深读', tone: 'bullish', items: [primaryUpside] }];
   }
-  const topDownside = (source.downside ?? [])[0];
-  if (topDownside) {
-    sections.push({ title: '兑现杀跌题材逻辑', tone: 'bearish', items: [topDownside] });
+  const primaryDownside = (source.downside ?? [])[0];
+  if (primaryDownside) {
+    return [{ title: '最强负反馈题材深读', tone: themeToneFromItem(primaryDownside), items: [primaryDownside] }];
   }
-  if (!sections.length && source.no_clear_mainline) {
-    sections.push({ title: '无明确主线状态', tone: 'neutral', items: [source.no_clear_mainline] });
+  if (source.no_clear_mainline) {
+    return [{ title: '无明确主线状态', tone: 'neutral', items: [source.no_clear_mainline] }];
   }
-  return sections;
+  return [];
 }
 
 function renderThemeDeepDiveMarkup(sections) {
@@ -537,9 +617,9 @@ function sentimentDial(score, state) {
   return `
     <div class="sentiment-dial">
       <div class="dial-ring ${cls}" style="--dial-dash:${dash}px">
-        <span class="dial-value" data-fit>${escapeHtml(String(score))}</span>
-        <span class="dial-state" data-fit>${escapeHtml(state ?? '')}</span>
-        <span class="dial-foot" data-fit>/100</span>
+        <span class="dial-value">${escapeHtml(String(score))}</span>
+        <span class="dial-state">${escapeHtml(state ?? '')}</span>
+        <span class="dial-foot">/100</span>
       </div>
       <div class="dial-bands">
         <span class="band b1">85+ 高潮</span>
@@ -560,9 +640,9 @@ function dialRing(score, state) {
   return `
     <div class="dial-ring-wrap">
       <div class="dial-ring ${cls}" style="--dial-dash:${dash}px">
-        <span class="dial-value" data-fit>${escapeHtml(String(score))}</span>
-        <span class="dial-state" data-fit>${escapeHtml(state ?? '')}</span>
-        <span class="dial-foot" data-fit>/100</span>
+        <span class="dial-value">${escapeHtml(String(score))}</span>
+        <span class="dial-state">${escapeHtml(state ?? '')}</span>
+        <span class="dial-foot">/100</span>
       </div>
       <div class="dial-band-tag" data-fit>${escapeHtml(band)}</div>
     </div>
@@ -602,6 +682,10 @@ function bullishSignals(data) {
 function bearishSignals(data) {
   const list = data.next_session_signals?.['风险信号'] ?? data.next_session_signals?.['空头信号'] ?? [];
   return list.slice(0, 3);
+}
+
+function primarySignals(items, limit = 2) {
+  return (items ?? []).map((item) => String(item ?? '').trim()).filter(Boolean).slice(0, limit);
 }
 
 function lightSpark(seed, pct) {
@@ -773,9 +857,8 @@ function darkEditorialPage1(data) {
   const thesis = data.market_summary?.action ?? '';
   const headline = data.market_summary?.headline ?? '';
   const styleShift = data.market_summary?.style_shift ?? '';
-  const northbound = data.capital_flow?.inflow_sectors?.[0]?.amount_text ?? '--';
-  const changeText = data.turnover?.change_text ?? '';
   const changeClass = volumeChangeClass(data.turnover ?? {});
+  const turnoverCompare = turnoverChangeText(data.turnover ?? {});
   return `
     <section class="poster de-poster de-page1" data-page="1" data-title="市场全景与资金流">
       <div class="de-frame">
@@ -786,8 +869,10 @@ function darkEditorialPage1(data) {
 
         <section class="de-judgement de-panel">
           <div class="de-badge">市场判断</div>
-          <strong class="de-headline">${features.slice(0, 3).map((f) => `<span class="de-headline-chip">${escapeHtml(f)}</span>`).join('<i class="de-headline-sep">·</i>')}</strong>
-          <p>${escapeHtml(styleShift || thesis)}</p>
+          <div class="de-judgement-body" data-fit>
+            <strong class="de-headline" data-fit>${features.slice(0, 3).map((f) => `<span class="de-headline-chip">${escapeHtml(f)}</span>`).join('<i class="de-headline-sep">·</i>')}</strong>
+            <p data-fit>${escapeHtml(styleShift || thesis)}</p>
+          </div>
         </section>
 
         <section class="de-panel de-index-panel">
@@ -820,10 +905,18 @@ function darkEditorialPage1(data) {
           <h2>资金与成交</h2>
           <div class="de-money-grid">
             <div class="de-icon-bubble red">${darkEditorialIcon('yen')}</div>
-            <div><span>两市成交</span><strong>${escapeHtml(data.turnover?.amount_text ?? '--')}</strong></div>
+            <div class="de-money-data">
+              <span>两市成交</span>
+              <strong>${escapeHtml(data.turnover?.amount_text ?? '--')}</strong>
+              ${turnoverCompare ? `<em class="de-money-change ${changeClass}" data-fit>${escapeHtml(turnoverCompare)}</em>` : ''}
+            </div>
             <div class="de-divider"></div>
             <div class="de-icon-bubble gold">${darkEditorialIcon('coins')}</div>
-            <div><span>主力资金</span><strong class="${marketClass(data.capital_flow?.net_yuan)}">${escapeHtml(data.capital_flow?.net_text ?? '--')}</strong></div>
+            <div class="de-money-data">
+              <span>${escapeHtml(data.capital_flow?.metric_name ?? '主力资金')}</span>
+              <strong class="${marketClass(data.capital_flow?.net_yuan)}">${escapeHtml(data.capital_flow?.net_text ?? '--')}</strong>
+              <em class="de-money-change neutral" data-fit>${escapeHtml(data.capital_flow?.source_label ?? '特大单/主力资金口径')}</em>
+            </div>
           </div>
         </section>
 
@@ -852,6 +945,8 @@ function darkEditorialPage2(data) {
   const factors = emotion.factors ?? [];
   const factorTop = factors.slice(0, 5);
   const factorBottom = factors.slice(5);
+  const longSignals = primarySignals(bullishSignals(data));
+  const shortSignals = primarySignals(bearishSignals(data));
   return `
     <section class="poster de-poster de-page2" data-page="2" data-title="短线情绪周期">
       <div class="de-frame">
@@ -881,12 +976,12 @@ function darkEditorialPage2(data) {
             <div class="de-signal-card bullish">
               <span class="de-title-icon">${darkEditorialIcon('check')}</span>
               <b>多头信号</b>
-              <ul>${bullishSignals(data).map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+              <ul>${longSignals.map((item) => `<li data-fit>${escapeHtml(item)}</li>`).join('')}</ul>
             </div>
             <div class="de-signal-card bearish">
               <span class="de-title-icon">${darkEditorialIcon('warning')}</span>
               <b>空头信号</b>
-              <ul>${bearishSignals(data).map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+              <ul>${shortSignals.map((item) => `<li data-fit>${escapeHtml(item)}</li>`).join('')}</ul>
             </div>
           </div>
         </section>
@@ -898,7 +993,8 @@ function darkEditorialPage2(data) {
 }
 
 function darkEditorialPage3(data) {
-  const conceptCounts = (data.themes?.concept_counts ?? []).slice(0, 12);
+  const gainerItems = themeGainerItems(data).slice(0, 12);
+  const loserItems = themeLoserItems(data).slice(0, 12);
   const interpretation = data.theme_interpretation ?? {};
   return `
     <section class="poster de-poster de-page3" data-page="3" data-title="涨停与主线复盘">
@@ -941,12 +1037,12 @@ function darkEditorialPage3(data) {
         <section class="de-panel de-theme-panel">
           <div class="de-theme-grid">
             <div class="de-theme-col de-theme-col-gainers">
-              <h3>领涨TOP <em>涨幅口径</em></h3>
-              ${topGainersThemeBars(conceptCounts, 5)}
+              <h3>领涨TOP <em>${themeGainerCaption(gainerItems)}</em></h3>
+              ${topGainersThemeBars(gainerItems, 5)}
             </div>
             <div class="de-theme-col de-theme-col-losers">
-              <h3>领跌TOP <em>跌幅口径</em></h3>
-              ${topLosersThemeBars(conceptCounts, 5)}
+              <h3>领跌TOP <em>${themeLoserCaption(loserItems)}</em></h3>
+              ${topLosersThemeBars(loserItems, 5)}
             </div>
           </div>
         </section>
@@ -965,7 +1061,7 @@ function darkEditorialPage4(data) {
   const boards = ladderBoardsSorted(data);
   const topBoards = boards.slice(0, 4);
   const roles = data.leader_roles ?? {};
-  const roleKeys = ['空间龙', '板块龙头', '容量中军', '核心助攻', '中位接力', '补涨前排', '首板前排', '风险负反馈'];
+  const roleKeys = DISPLAY_LEADER_ROLE_KEYS;
   return `
     <section class="poster de-poster de-page4" data-page="4" data-title="强势板块龙头梯队">
       <div class="de-frame">
@@ -1080,12 +1176,13 @@ function darkEditorialCss() {
     .de-date { margin-top: 18px; color: #8d9292; font-size: 21px; font-weight: 700; letter-spacing: 0; }
     .de-footer { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; color: #9aa0a0; font-size: 17px; font-weight: 700; }
 
-    .de-page1 .de-judgement { left: 26px; right: 26px; top: 200px; height: 220px; text-align: center; padding: 50px 18px 14px; }
+    .de-page1 .de-judgement { left: 26px; right: 26px; top: 200px; height: 220px; text-align: center; padding: 0; }
     .de-badge { position: absolute; top: -1px; left: 50%; transform: translateX(-50%); width: 196px; height: 52px; line-height: 48px; border-radius: 0 0 28px 28px; background: linear-gradient(180deg, #f8d991, #c78d42); color: #10100d; font-size: 26px; font-weight: 900; box-shadow: 0 8px 18px rgba(0,0,0,.28); }
-    .de-judgement strong { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px 12px; margin-top: 16px; font-family: SimSun, STSong, serif; line-height: 1.1; color: #f5dba6; text-shadow: 0 3px 12px rgba(0,0,0,.6); }
-    .de-headline-chip { display: inline-block; max-width: 100%; font-size: 42px; font-weight: 900; letter-spacing: 1px; }
-    .de-headline-sep { color: #c78d42; font-size: 32px; font-style: normal; font-weight: 700; opacity: .9; }
-    .de-judgement p { margin: 10px 0 0; color: #e8e2d7; font-size: 20px; line-height: 1.4; font-weight: 700; letter-spacing: 1px; }
+    .de-judgement-body { position: absolute; left: 28px; right: 28px; top: 58px; bottom: 18px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: var(--de-judgement-gap, 8px); min-width: 0; min-height: 0; }
+    .de-judgement strong { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; align-content: center; gap: 6px 10px; width: 100%; margin: 0; min-width: 0; font-family: SimSun, STSong, serif; line-height: 1.08; color: #f5dba6; text-shadow: 0 3px 12px rgba(0,0,0,.6); overflow-wrap: anywhere; word-break: break-word; }
+    .de-headline-chip { display: inline-block; max-width: 100%; min-width: 0; font-size: var(--de-headline-size, 36px); line-height: 1.08; font-weight: 900; letter-spacing: 1px; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
+    .de-headline-sep { color: #c78d42; font-size: calc(var(--de-headline-size, 36px) * .7); line-height: 1; font-style: normal; font-weight: 700; opacity: .9; }
+    .de-judgement p { width: 100%; max-width: 960px; margin: 0 auto; color: #e8e2d7; font-size: var(--de-detail-size, 18px); line-height: 1.32; font-weight: 800; letter-spacing: 0; overflow-wrap: anywhere; word-break: break-word; }
     .de-index-panel { left: 26px; right: 26px; top: 436px; height: 304px; padding: 20px 20px; overflow: hidden; }
     .de-index-panel h2, .de-breadth h2, .de-money h2, .de-core h2, .de-dial-panel h2, .de-factor-panel h2, .de-signal-panel h2, .de-limit-panel h2, .de-theme-panel h2, .de-deep-panel h2, .de-ladder-head h2, .de-ladder-strip h2, .de-roles-panel h2, .de-watch-panel h2 { margin: 0 0 12px; color: #f5dba6; font-size: 29px; line-height: 1; font-weight: 900; }
     .de-index-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -1105,16 +1202,18 @@ function darkEditorialCss() {
     .de-breadth-bar i { display: block; position: relative; height: 100%; }
     .de-breadth-bar b { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); color: #fff5e2; font-size: 20px; font-weight: 800; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
     .de-breadth p { margin: 6px 0 0; text-align: center; color: #b8b9b6; font-size: 18px; line-height: 1.15; font-weight: 700; }
-    .de-money { left: 26px; right: 26px; top: 932px; height: 144px; padding: 18px 24px; }
+    .de-money { left: 26px; right: 26px; top: 932px; height: 160px; padding: 18px 24px; }
     .de-money-grid { display: grid; grid-template-columns: 66px 1fr 1px 66px 1fr; gap: 24px; align-items: center; }
     .de-money-grid span { display: block; color: #c9cac5; font-size: 19px; font-weight: 800; }
     .de-money-grid strong { display: block; margin-top: 6px; color: #ff5652; font-size: 34px; line-height: 1; }
+    .de-money-data { min-width: 0; }
+    .de-money-change { display: block; margin-top: 8px; color: #c9b88c; font-size: 16px; line-height: 1.2; font-style: normal; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .de-icon-bubble { width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; font-size: 38px; box-shadow: inset 0 0 0 4px rgba(255,255,255,.10), 0 8px 18px rgba(0,0,0,.28); }
     .de-icon-bubble.red { color: #ff4f49; background: radial-gradient(circle, rgba(255,78,72,.38), rgba(80,18,16,.85)); border: 2px solid #d84b41; }
     .de-icon-bubble.gold { color: #ffcf76; background: radial-gradient(circle, rgba(255,207,118,.38), rgba(78,51,16,.85)); border: 2px solid #d49b45; }
     .de-icon-bubble .de-svg-icon { width: 40px; height: 40px; }
     .de-divider { width: 1px; height: 82px; background: rgba(220,177,108,.52); }
-    .de-core { left: 26px; right: 26px; top: 1092px; height: 240px; padding: 14px 24px; display: flex; flex-direction: column; }
+    .de-core { left: 26px; right: 26px; top: 1110px; height: 222px; padding: 14px 24px; display: flex; flex-direction: column; }
     .de-core-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; flex: 1; min-height: 0; }
     .de-core-grid > div { display: grid; grid-template-columns: 60px 1fr; column-gap: 16px; padding-right: 14px; border-right: 1px solid rgba(218,166,87,.38); align-content: center; }
     .de-core-grid > div:last-child { border-right: 0; padding-right: 0; }
@@ -1134,14 +1233,14 @@ function darkEditorialCss() {
     .de-dial-wrap .dial-ring-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
     .de-dial-wrap .dial-ring { width: 180px; height: 180px; }
     .de-dial-wrap .dial-ring::after { inset: 12px; }
-    .de-dial-wrap .dial-value { font-size: 88px; line-height: 1; }
+    .de-dial-wrap .dial-value { display: block; font-size: 88px; line-height: .9; }
     .de-dial-wrap .dial-state { display: none; }
     .de-dial-wrap .dial-foot { display: none; }
     .de-dial-wrap .dial-band-tag { padding: 6px 22px; border: 1px solid #d8a052; border-radius: 999px; color: #f5dba6; font-size: 22px; font-weight: 900; letter-spacing: 4px; background: rgba(8,18,18,.55); }
     .de-dial-bands { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; align-content: center; }
     .de-dial-bands .band { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 12px; border: 1px solid rgba(218,166,87,.32); border-radius: 8px; background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01)); }
     .de-dial-bands .band b { color: #f5dba6; font-size: 22px; font-weight: 900; letter-spacing: 0.5px; }
-    .de-dial-bands .band i { color: #d8a052; font-size: 18px; font-style: normal; font-weight: 700; }
+    .de-dial-bands .band i { color: #d8a052; font-size: 21px; font-style: normal; font-weight: 800; }
     .de-dial-bands .band p { margin: 0; color: #d8d4c2; font-size: 18px; line-height: 1.35; text-align: center; }
     .de-factor-panel { left: 26px; right: 26px; top: 612px; height: 380px; padding: 22px 28px; }
     .de-factor-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 36px; }
@@ -1155,14 +1254,14 @@ function darkEditorialCss() {
     .factor-row.warning .bar i { background: linear-gradient(90deg, #f4c15d, #d49b45); }
     .factor-row.bearish .bar i { background: linear-gradient(90deg, #1ab47b, #0e7e58); }
     .de-signal-panel { left: 26px; right: 26px; top: 1008px; height: 332px; padding: 22px 24px; overflow: hidden; }
-    .de-signal-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
-    .de-signal-card { position: relative; height: 248px; padding: 18px 22px; border-radius: 8px; border: 1px solid rgba(202,144,69,.45); background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01)); overflow: hidden; }
+    .de-signal-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; height: calc(100% - 44px); min-height: 0; }
+    .de-signal-card { position: relative; min-height: 0; padding: 16px 22px 14px; border-radius: 8px; border: 1px solid rgba(202,144,69,.45); background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01)); overflow: hidden; display: flex; flex-direction: column; }
     .de-signal-card .de-title-icon { font-size: 28px; }
     .de-signal-card.bullish { border-color: rgba(255,80,68,.45); }
     .de-signal-card.bearish { border-color: rgba(26,180,123,.45); }
-    .de-signal-card b { display: block; margin-top: 6px; color: #f0e1c1; font-size: 26px; }
-    .de-signal-card ul { margin: 10px 0 0; padding: 0; list-style: none; }
-    .de-signal-card li { position: relative; margin: 6px 0; padding-left: 18px; color: #d6c7a4; font-size: 17px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .de-signal-card b { display: block; margin-top: 5px; color: #f0e1c1; font-size: 25px; line-height: 1.1; }
+    .de-signal-card ul { display: grid; align-content: start; gap: 8px; min-height: 0; margin: 10px 0 0; padding: 0; list-style: none; }
+    .de-signal-card li { position: relative; margin: 0; padding-left: 18px; color: #d6c7a4; font-size: 17px; line-height: 1.38; white-space: normal; overflow-wrap: anywhere; word-break: break-word; }
     .de-signal-card li::before { content: ""; position: absolute; left: 0; top: 8px; width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: .9; }
     .de-signal-card.bullish li::before { background: #ff5451; }
     .de-signal-card.bearish li::before { background: #1ab47b; }
@@ -1192,8 +1291,8 @@ function darkEditorialCss() {
     .theme-empty { color: #8a8475; font-size: 16px; padding: 16px 0; text-align: center; font-style: italic; }
     /* 基础行：3 列(领涨) / 2 列(领跌) */
     .theme-bar-row { display: grid; align-items: center; gap: 10px; font-size: 17px; color: #e9e2cf; min-height: 0; line-height: 1.15; }
-    .theme-bars.gainers .theme-bar-row { grid-template-columns: 100px 1fr 56px; }
-    .theme-bars.losers .theme-bar-row { grid-template-columns: 100px 1fr; }
+    .theme-bars.gainers .theme-bar-row { grid-template-columns: 168px 1fr 74px; }
+    .theme-bars.losers .theme-bar-row { grid-template-columns: 136px 1fr; }
     /* 列标题行 */
     .theme-bar-header { font-size: 15px; color: #c9b88c; font-weight: 700; border-bottom: 1px solid rgba(220,177,108,.32); padding: 0 0 6px; min-height: 22px; }
     .theme-bar-header em { font-weight: 700; }
@@ -1216,7 +1315,7 @@ function darkEditorialCss() {
     .theme-bar-placeholder .bar-track::before { background: rgba(220,177,108,.10); }
     .theme-bar-placeholder .bar-track b { background: rgba(220,177,108,.18) !important; box-shadow: none; }
     .theme-bar-placeholder .bar-track u { color: rgba(233,226,207,.30); }
-    .de-deep-panel { left: 26px; right: 26px; top: 928px; height: 412px; padding: 0; overflow: hidden; }
+    .de-deep-panel { left: 26px; right: 26px; top: 920px; height: 424px; padding: 0; overflow: hidden; }
     .de-deep-panel .theme-deep-dive { position: absolute; inset: 22px 26px; }
     .theme-deep-dive .deep-dive-header { display: flex; align-items: baseline; gap: 14px; margin-bottom: 14px; }
     .theme-deep-dive .deep-dive-header h2 { margin: 0; color: #f5dba6; font-size: 30px; }
@@ -1227,24 +1326,30 @@ function darkEditorialCss() {
     .deep-dive-card.bullish { border-color: rgba(255,80,68,.42); }
     .deep-dive-card.bearish { border-color: rgba(26,180,123,.42); }
     .deep-dive-card h2 { margin: 0 0 12px; color: #f5dba6; font-size: 23px; }
+    .theme-deep-dive.single .deep-dive-card h2 { font-size: 26px; }
     .deep-dive-items { display: grid; gap: 10px; min-height: 0; flex: 1; align-content: start; }
     .deep-dive-item { padding: 14px 16px; border: 1px solid rgba(255,255,255,.07); border-radius: 6px; background: rgba(0,0,0,.18); overflow: hidden; display: flex; flex-direction: column; gap: 10px; }
+    .theme-deep-dive.single .deep-dive-item { height: 100%; padding: 16px 18px; gap: 12px; }
     .deep-dive-title { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .deep-dive-title h3 { margin: 0; color: #f0e1c1; font-size: 22px; font-weight: 800; }
+    .theme-deep-dive.single .deep-dive-title h3 { font-size: 28px; }
     .deep-dive-card.bullish .deep-dive-title h3 { color: #ff8b76; }
     .deep-dive-card.bearish .deep-dive-title h3 { color: #58d6a4; }
     .deep-dive-stage { padding: 3px 10px; border-radius: 999px; background: rgba(220,177,108,.16); color: #f4c15d; font-size: 14px; flex-shrink: 0; }
     .deep-dive-analysis { margin: 0; color: #d6c7a4; font-size: 16px; line-height: 1.6; text-align: justify; }
+    .theme-deep-dive.single .deep-dive-analysis { font-size: 18px; line-height: 1.55; }
     .deep-dive-judgment, .deep-dive-narrative { margin: 5px 0; color: #d6c7a4; font-size: 16px; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-box-orient: vertical; }
     .deep-dive-judgment { -webkit-line-clamp: 2; line-clamp: 2; }
     .deep-dive-narrative { -webkit-line-clamp: 4; line-clamp: 4; }
     .deep-dive-judgment b, .deep-dive-narrative b { color: #f0d49c; margin-right: 6px; }
     .deep-dive-signals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .deep-dive-signal { display: flex; gap: 6px; padding: 7px 10px; border-radius: 5px; background: rgba(0,0,0,.22); color: #d6c7a4; font-size: 14px; line-height: 1.4; }
+    .theme-deep-dive.single .deep-dive-signal { padding: 10px 12px; font-size: 16px; line-height: 1.45; }
     .deep-dive-signal.bullish { border-left: 2px solid #ff5750; }
     .deep-dive-signal.bearish { border-left: 2px solid #1ab47b; }
     .deep-dive-signal b { color: #f0d49c; flex-shrink: 0; }
     .deep-dive-compact-signals { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; color: #d6c7a4; font-size: 14px; }
+    .deep-dive-signals, .deep-dive-compact-signals { flex-shrink: 0; }
     .deep-dive-compact-signals b { color: #f0d49c; margin-right: 4px; }
     .deep-dive-item.compact .deep-dive-judgment { -webkit-line-clamp: 1; line-clamp: 1; }
     .deep-dive-item.compact .deep-dive-narrative { -webkit-line-clamp: 1; line-clamp: 1; }
@@ -1272,27 +1377,28 @@ function darkEditorialCss() {
     .de-ladder-row b { color: #f0d49c; font-size: 26px; font-weight: 900; }
     .de-ladder-row span { color: #e9e2cf; font-size: 19px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .de-ladder-row span em { color: #c9b88c; font-style: normal; margin-left: 8px; font-size: 16px; }
-    .de-roles-panel { left: 26px; right: 26px; top: 716px; height: 420px; padding: 18px 22px; }
-    .de-roles-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; height: calc(100% - 38px); align-items: stretch; }
-    .role-card { padding: 14px 14px; border: 1px solid rgba(202,144,69,.45); border-radius: 8px; background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01)); display: flex; flex-direction: column; justify-content: center; }
-    .role-card h2 { margin: 0 0 8px; color: #f0d49c; font-size: 20px; font-weight: 800; }
+    .de-roles-panel { left: 26px; right: 26px; top: 716px; height: 396px; padding: 18px 22px; }
+    .de-roles-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; height: calc(100% - 38px); align-items: stretch; }
+    .role-card { padding: 18px 18px; border: 1px solid rgba(202,144,69,.45); border-radius: 8px; background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01)); display: flex; flex-direction: column; justify-content: center; }
+    .role-card h2 { margin: 0 0 10px; color: #f0d49c; font-size: 24px; font-weight: 800; }
     .role-card.bullish { border-color: rgba(255,80,68,.40); }
     .role-card.warning { border-color: rgba(244,193,93,.40); }
     .role-card.bearish { border-color: rgba(26,180,123,.40); }
-    .leader-row { display: flex; align-items: center; gap: 6px; margin: 6px 0; font-size: 17px; color: #e9e2cf; }
-    .leader-row b { color: #f0e1c1; font-weight: 700; }
-    .leader-row em { color: #d6c7a4; font-style: normal; font-size: 15px; }
-    .de-watch-panel { left: 26px; right: 26px; top: 1160px; height: 196px; padding: 18px 22px; overflow: hidden; }
+    .leader-row { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); align-items: start; column-gap: 8px; margin: 7px 0; font-size: 18px; line-height: 1.35; color: #e9e2cf; }
+    .leader-row b { color: #f0e1c1; font-weight: 700; white-space: nowrap; overflow: visible; }
+    .leader-row span { min-width: 0; }
+    .leader-row em { color: #d6c7a4; font-style: normal; font-size: 17px; font-weight: 800; }
+    .de-watch-panel { left: 26px; right: 26px; top: 1126px; height: 208px; padding: 14px 20px; overflow: hidden; }
     .de-watch-panel h2 { display: flex; align-items: center; gap: 8px; }
     .de-watch-panel h2 .de-title-icon { color: #f0d49c; font-size: 28px; }
-    .de-watch-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; height: calc(100% - 46px); }
-    .de-watch-card { padding: 16px 20px; border-radius: 8px; border: 1px solid rgba(202,144,69,.40); background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01)); display: flex; flex-direction: column; gap: 8px; }
+    .de-watch-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; height: calc(100% - 42px); }
+    .de-watch-card { min-height: 0; padding: 12px 16px; border-radius: 8px; border: 1px solid rgba(202,144,69,.40); background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01)); display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
     .de-watch-card.bullish { border-color: rgba(255,80,68,.40); }
     .de-watch-card.warning { border-color: rgba(244,193,93,.40); }
     .de-watch-card.bearish { border-color: rgba(26,180,123,.40); }
-    .de-watch-card b { display: flex; align-items: center; gap: 10px; color: #f0d49c; font-size: 24px; margin-bottom: 2px; font-weight: 900; letter-spacing: 1px; }
-    .de-watch-card b svg { width: 28px; height: 28px; flex: 0 0 28px; }
-    .de-watch-card p { margin: 0; color: #d6c7a4; font-size: 17px; line-height: 1.55; }
+    .de-watch-card b { display: flex; align-items: center; gap: 9px; color: #f0d49c; font-size: 22px; line-height: 1.15; margin-bottom: 0; font-weight: 900; letter-spacing: 1px; }
+    .de-watch-card b svg { width: 26px; height: 26px; flex: 0 0 26px; }
+    .de-watch-card p { margin: 0; color: #d6c7a4; font-size: 16px; line-height: 1.38; overflow-wrap: anywhere; word-break: break-word; }
 
     .bullish { color: #ff5451 !important; }
     .bearish { color: #29b982 !important; }
@@ -1351,6 +1457,30 @@ function darkEditorialSparkScript() {
   return `
     <script>
       (function () {
+        const fitDarkEditorialJudgement = () => {
+          const body = document.querySelector('.de-judgement-body');
+          if (!body) return;
+          const steps = [
+            [36, 18, 8],
+            [34, 17, 7],
+            [32, 16, 6],
+            [30, 15, 5],
+            [28, 14, 4],
+            [26, 13, 4],
+            [24, 12, 3]
+          ];
+          const fits = () =>
+            body.scrollWidth <= body.clientWidth + 2 &&
+            body.scrollHeight <= body.clientHeight + 2;
+          for (const [headlineSize, detailSize, gap] of steps) {
+            body.style.setProperty('--de-headline-size', headlineSize + 'px');
+            body.style.setProperty('--de-detail-size', detailSize + 'px');
+            body.style.setProperty('--de-judgement-gap', gap + 'px');
+            if (fits()) break;
+          }
+        };
+        fitDarkEditorialJudgement();
+
         const seedProfiles = {
           upA: [.70,.61,.67,.59,.73,.55,.62,.50,.68,.72,.63,.48,.42,.55,.60,.46,.65,.71,.58,.74,.62,.69,.56,.66,.72,.61,.49,.38,.45,.33,.42,.30,.37,.25,.35,.22,.29,.18,.25,.14,.19],
           upB: [.64,.55,.61,.47,.42,.57,.63,.46,.36,.44,.54,.60,.45,.32,.38,.50,.40,.27,.34,.46,.36,.25,.18,.31,.23,.15,.26,.12,.22,.10,.18,.08,.16,.06,.14,.08,.12,.05,.10,.07,.09],
@@ -1438,6 +1568,20 @@ function lightIcon(name) {
   return '';
 }
 
+function lightSectionIcon(name) {
+  const icons = {
+    metrics: `<svg viewBox="0 0 44 44" aria-hidden="true"><rect x="7" y="24" width="6" height="11" rx="1.5" fill="currentColor"/><rect x="19" y="16" width="6" height="19" rx="1.5" fill="currentColor"/><rect x="31" y="9" width="6" height="26" rx="1.5" fill="currentColor"/><path d="M6 35h32" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>`,
+    ladder: `<svg viewBox="0 0 44 44" aria-hidden="true"><path d="M15 7v30M29 7v30M15 14h14M15 22h14M15 30h14" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 37h22" fill="none" stroke="#b08340" stroke-width="2.4" stroke-linecap="round"/></svg>`,
+    roles: `<svg viewBox="0 0 44 44" aria-hidden="true"><circle cx="12" cy="14" r="5" fill="currentColor"/><circle cx="31" cy="13" r="5" fill="#b08340"/><circle cx="23" cy="31" r="6" fill="currentColor"/><path d="M16.5 16.5 20 26M27 26l2.6-8.4M17 14h9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" opacity=".55"/></svg>`,
+    watch: `<svg viewBox="0 0 44 44" aria-hidden="true"><path d="M8 11h28v24H8z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M14 19h16M14 26h9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><path d="m27 29 4 4 7-9" fill="none" stroke="#b08340" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  };
+  return icons[name] ?? '';
+}
+
+function lightSectionTitle(icon, title) {
+  return `<h2><span class="li-section-icon ${escapeHtml(icon)}">${lightSectionIcon(icon)}</span>${escapeHtml(title)}</h2>`;
+}
+
 function lightIndexDelta(item) {
   return item.delta_text ?? item.change_text ?? '';
 }
@@ -1450,6 +1594,13 @@ function lightBreadthNotableText(data, up) {
     return bucket;
   }
   return '';
+}
+
+function lightBreadthRatioText(data, up, down) {
+  const text = String(data.breadth?.ratio_text ?? '').replace(/^涨跌比\s*/, '').trim();
+  if (text && text !== '--') return text;
+  if (Number.isFinite(up) && Number.isFinite(down)) return `${up}:${down}`;
+  return '--';
 }
 
 function lightIndexCards(indices) {
@@ -1468,8 +1619,23 @@ function lightMetricBox(label, value, sub, cls = 'bullish', compare = '') {
     <div class="li-metric-box ${cls}">
       <span>${escapeHtml(label)}</span>
       <strong>${escapeHtml(value)}</strong>
-      <em>${escapeHtml(sub)}</em>
       ${compare}
+      ${sub ? `<em>${escapeHtml(sub)}</em>` : '<em class="empty-sub" aria-hidden="true"></em>'}
+    </div>
+  `;
+}
+
+function lightSentimentScoreBlock(score, state) {
+  const dash = dialArc(score);
+  const cls = dialColorClass(score);
+  const cycle = String(state ?? '').trim() || dialBandNameByScore(score);
+  return `
+    <div class="li-score-block">
+      <div class="li-score-ring ${cls}" style="--dial-dash:${dash}px">
+        <span>${escapeHtml(String(score))}</span>
+      </div>
+      <strong class="${cls}" data-fit>${escapeHtml(cycle)}</strong>
+      <em>当前情绪周期</em>
     </div>
   `;
 }
@@ -1526,8 +1692,7 @@ function lightInstitutionalPage1(data) {
           </div>
           <div class="li-breadth-bar"><i class="bullish-bg" style="width:${upPct}%"></i><i class="bearish-bg" style="width:${downPct}%"></i></div>
           <div class="li-breadth-foot">
-            <span>涨跌比　${escapeHtml(data.breadth?.ratio_text?.replace('涨跌比 ', '') ?? '--')}</span>
-            <span>${escapeHtml(lightBreadthNotableText(data, up))}</span>
+            <span>涨跌比　${escapeHtml(lightBreadthRatioText(data, up, down))}</span>
             <span>涨停　<b class="bullish">${escapeHtml(data.limit_up?.limit_up ?? '--')}</b></span>
             <span>跌停　<b class="bearish">${escapeHtml(data.limit_up?.limit_down ?? '--')}</b></span>
           </div>
@@ -1570,8 +1735,7 @@ function lightInstitutionalPage2(data) {
           <h2>情绪分 / 状态</h2>
           <div class="li-dial-wrap">
             <div class="li-dial-card">
-              ${sentimentDial(emotion.score ?? 0, emotion.state ?? '--')}
-              <p class="li-dial-note">情绪分由10项因子加总得到；0-24冰点，25-39弱修复，40-54分歧，55-69修复初期，70-84主线扩散，85+高潮。</p>
+              ${lightSentimentScoreBlock(emotion.score ?? 0, emotion.state ?? '--')}
             </div>
             <div class="li-band-table">
               <h3>情绪分区间含义</h3>
@@ -1611,7 +1775,8 @@ function lightInstitutionalPage2(data) {
 }
 
 function lightInstitutionalPage3(data) {
-  const conceptCounts = (data.themes?.concept_counts ?? []).slice(0, 12);
+  const gainerItems = themeGainerItems(data).slice(0, 12);
+  const loserItems = themeLoserItems(data).slice(0, 12);
   const interpretation = data.theme_interpretation ?? {};
   const sections = themeDeepDiveSections(interpretation);
   return `
@@ -1621,7 +1786,6 @@ function lightInstitutionalPage3(data) {
         <section class="li-hero li-hero-page3">
           <div class="li-flame">${lightIcon('flame')}</div>
           <h1>涨停复盘 · 主线结构</h1>
-          <p>展示口径　${escapeHtml(data.limit_up?.display口径 ?? '非ST短线口径')}</p>
         </section>
         <section class="li-panel li-limit-panel">
           <h2>涨跌停与封板结构</h2>
@@ -1639,12 +1803,12 @@ function lightInstitutionalPage3(data) {
         <section class="li-panel li-theme-panel">
           <div class="li-theme-grid">
             <div class="li-theme-col li-theme-col-gainers">
-              <h3>领涨TOP <em>涨幅口径</em></h3>
-              ${topGainersThemeBars(conceptCounts, 5)}
+              <h3>领涨TOP <em>${themeGainerCaption(gainerItems)}</em></h3>
+              ${topGainersThemeBars(gainerItems, 5)}
             </div>
             <div class="li-theme-col li-theme-col-losers">
-              <h3>领跌TOP <em>跌幅口径</em></h3>
-              ${topLosersThemeBars(conceptCounts, 5)}
+              <h3>领跌TOP <em>${themeLoserCaption(loserItems)}</em></h3>
+              ${topLosersThemeBars(loserItems, 5)}
             </div>
           </div>
         </section>
@@ -1661,7 +1825,7 @@ function lightInstitutionalPage4(data) {
   const boards = ladderBoardsSorted(data);
   const topBoards = boards.slice(0, 4);
   const roles = data.leader_roles ?? {};
-  const roleKeys = ['空间龙', '板块龙头', '容量中军', '核心助攻', '中位接力', '补涨前排', '首板前排', '风险负反馈'];
+  const roleKeys = DISPLAY_LEADER_ROLE_KEYS;
   return `
     <section class="poster li-poster li-page4" data-page="4" data-title="强势板块龙头梯队">
       <div class="li-paper">
@@ -1672,7 +1836,7 @@ function lightInstitutionalPage4(data) {
           <div class="li-page4-meta"><i></i><span>连板梯队 / 角色映射</span><i></i></div>
         </section>
         <section class="li-panel li-ladder-head">
-          <h2>梯队关键指标</h2>
+          ${lightSectionTitle('metrics', '梯队关键指标')}
           <div class="li-ladder-metrics">
             <div class="li-ladder-card">
               <span>非ST空间高度</span>
@@ -1691,7 +1855,7 @@ function lightInstitutionalPage4(data) {
           </div>
         </section>
         <section class="li-panel li-ladder-strip">
-          <h2>连板梯队</h2>
+          ${lightSectionTitle('ladder', '连板梯队')}
           <div class="li-ladder-rows">
             ${topBoards.map((row) => `
               <div class="li-ladder-row">
@@ -1702,13 +1866,13 @@ function lightInstitutionalPage4(data) {
           </div>
         </section>
         <section class="li-panel li-roles-panel">
-          <h2>角色映射</h2>
+          ${lightSectionTitle('roles', '角色映射')}
           <div class="li-roles-grid">
             ${roleKeys.map((role) => rolePanel(role, roleItemsForRole(roles, role, 2), 2)).join('')}
           </div>
         </section>
         <section class="li-panel li-watch-panel">
-          <h2>次日梯队判断</h2>
+          ${lightSectionTitle('watch', '次日梯队判断')}
           <div class="li-watch-grid">
             <div class="bullish"><b>${lightSignalIcon('bullish')}确认</b><p>${escapeHtml((data.next_session_signals?.['确认信号'] ?? [])[0] ?? '')}</p></div>
             <div class="warning"><b>${lightSignalIcon('warning')}弱化</b><p>${escapeHtml((data.next_session_signals?.['弱化信号'] ?? [])[0] ?? '')}</p></div>
@@ -1759,6 +1923,7 @@ function lightInstitutionalCss() {
     .li-topline b { color: #b08340; font-weight: 500; }
     .li-page2 .li-topline b, .li-page3 .li-topline b, .li-page4 .li-topline b { color: #1a3050; }
     .li-hero { position: relative; padding-top: 26px; }
+    .li-page1 .li-hero { padding-top: 22px; height: 218px; overflow: hidden; }
     .li-hero h1 {
       margin: 0;
       color: #1a3050;
@@ -1767,8 +1932,12 @@ function lightInstitutionalCss() {
       line-height: 1;
       font-weight: 900;
     }
+    .li-page1 .li-hero h1 { font-size: 72px; line-height: 1; }
     .li-hero div:not(.li-flame) { display: flex; align-items: center; margin-top: 16px; gap: 18px; color: #2d2f34; font-size: 32px; letter-spacing: 10px; }
+    .li-page1 .li-hero div:not(.li-flame) { align-items: flex-start; margin-top: 14px; gap: 14px; color: #525963; font-size: 28px; line-height: 1.35; letter-spacing: 4px; }
+    .li-page1 .li-hero div:not(.li-flame) span { display: block; flex: 1; max-height: 76px; overflow: hidden; }
     .li-hero i { width: 96px; height: 10px; background: #d8211d; display: block; }
+    .li-page1 .li-hero i { flex: 0 0 64px; margin-top: 13px; height: 8px; }
     .li-panel {
       position: absolute;
       border: 1.5px solid rgba(30,58,91,.54);
@@ -1777,15 +1946,15 @@ function lightInstitutionalCss() {
       box-shadow: inset 0 0 60px rgba(239,232,218,.30);
       overflow: hidden;
     }
-    .li-index-panel { left: 34px; right: 34px; top: 222px; height: 252px; padding: 22px 20px; }
+    .li-index-panel { left: 34px; right: 34px; top: 282px; height: 218px; padding: 20px 20px; }
     .li-index-grid { display: grid; grid-template-columns: repeat(4, 1fr); height: 100%; }
     .li-index-card { position: relative; text-align: center; padding: 0 18px; border-right: 1px solid rgba(33,54,82,.36); overflow: hidden; }
     .li-index-card:last-child { border-right: 0; }
     .li-index-card span { display: block; color: #171c23; font-size: 26px; font-weight: 700; }
-    .li-index-card strong { display: block; margin-top: 12px; font-size: 46px; line-height: 1; font-weight: 500; }
-    .li-index-card em { display: block; margin-top: 8px; font-size: 22px; line-height: 1; font-style: normal; }
-    .li-spark { width: 210px; height: 56px; margin-top: 14px; }
-    .li-breadth-panel { left: 34px; right: 34px; top: 498px; height: 258px; padding: 20px 28px; }
+    .li-index-card strong { display: block; margin-top: 10px; font-size: 42px; line-height: 1; font-weight: 500; }
+    .li-index-card em { display: block; margin-top: 7px; font-size: 21px; line-height: 1; font-style: normal; }
+    .li-spark { width: 210px; height: 52px; margin-top: 10px; }
+    .li-breadth-panel { left: 34px; right: 34px; top: 524px; height: 224px; padding: 18px 28px; }
     .li-breadth-panel h2, .li-summary-panel h2, .li-turnover h2, .li-flow h2, .li-dial-panel h2, .li-factor-panel h2, .li-signal-panel h2, .li-limit-panel h2, .li-theme-panel h2, .li-deep-panel h2, .li-ladder-head h2, .li-ladder-strip h2, .li-roles-panel h2, .li-watch-panel h2 {
       margin: 0;
       color: #1a3050;
@@ -1793,15 +1962,15 @@ function lightInstitutionalCss() {
       line-height: 1;
       font-weight: 900;
     }
-    .li-breadth-head { display: flex; justify-content: space-between; margin-top: 18px; color: #24282c; font-size: 28px; }
-    .li-breadth-head b { font-size: 44px; margin: 0 4px; }
-    .li-breadth-bar { display: flex; height: 30px; margin-top: 18px; border-radius: 999px; overflow: hidden; background: rgba(35,47,60,.10); box-shadow: inset 0 2px 6px rgba(20,30,40,.18); }
+    .li-breadth-head { display: flex; justify-content: space-between; margin-top: 12px; color: #24282c; font-size: 26px; }
+    .li-breadth-head b { font-size: 40px; margin: 0 4px; }
+    .li-breadth-bar { display: flex; height: 30px; margin-top: 14px; border-radius: 999px; overflow: hidden; background: rgba(35,47,60,.10); box-shadow: inset 0 2px 6px rgba(20,30,40,.18); }
     .li-breadth-bar i { display: block; height: 100%; }
-    .li-breadth-foot { display: grid; grid-template-columns: 1fr 1fr .75fr .75fr; gap: 18px; margin-top: 18px; color: #2f3336; font-size: 26px; text-align: center; }
+    .li-breadth-foot { display: grid; grid-template-columns: 1fr .75fr .75fr; gap: 18px; margin-top: 14px; color: #2f3336; font-size: 24px; text-align: center; }
     .li-breadth-foot span { border-right: 1px solid rgba(34,52,76,.24); }
     .li-breadth-foot span:last-child { border-right: 0; }
-    .li-breadth-foot b { font-size: 32px; }
-    .li-capital-panel { left: 34px; right: 34px; top: 780px; height: 258px; display: grid; grid-template-columns: 1fr 1.08fr; }
+    .li-breadth-foot b { font-size: 30px; }
+    .li-capital-panel { left: 34px; right: 34px; top: 772px; height: 236px; display: grid; grid-template-columns: 1fr 1.08fr; }
     .li-turnover, .li-flow { display: grid; grid-template-columns: 70px 1fr; column-gap: 28px; padding: 24px 22px; }
     .li-flow { border-left: 1px solid rgba(30,58,91,.36); }
     .li-round-icon { width: 66px; height: 66px; border: 1.5px solid #1b3c64; border-radius: 50%; display: grid; place-items: center; color: #244868; }
@@ -1815,12 +1984,12 @@ function lightInstitutionalCss() {
     .li-flow p { display: flex; justify-content: space-between; align-items: center; height: 42px; margin: 0; border-bottom: 1px solid rgba(30,58,91,.14); color: #42464a; font-size: 22px; }
     .li-flow p:first-of-type { margin-top: 20px; }
     .li-flow b { color: #d8211d; font-size: 24px; font-weight: 500; }
-    .li-summary-panel { left: 34px; right: 34px; top: 1062px; height: 286px; padding: 24px 28px; }
-    .li-summary-panel ul { margin: 24px 0 0; padding: 0; list-style: none; }
+    .li-summary-panel { left: 34px; right: 34px; top: 1032px; height: 284px; padding: 22px 28px; }
+    .li-summary-panel ul { margin: 20px 0 0; padding: 0; list-style: none; }
     .li-summary-panel li { position: relative; padding: 10px 0 10px 24px; color: #1d2227; font-size: 22px; line-height: 1.5; border-bottom: 1px solid rgba(30,58,91,.14); }
     .li-summary-panel li:last-child { border-bottom: 0; }
     .li-summary-panel li::before { content: ""; position: absolute; left: 0; top: 19px; width: 9px; height: 9px; background: #d8211d; border-radius: 50%; }
-    .li-footer { position: absolute; left: 34px; right: 34px; bottom: 35px; color: #3a3d41; font-size: 22px; text-align: center; letter-spacing: 4px; }
+    .li-footer { position: absolute; left: 34px; right: 34px; bottom: 21px; color: #3a3d41; font-size: 18px; line-height: 1.25; text-align: center; letter-spacing: 2px; }
 
     .li-page2 .li-hero { padding-top: 24px; padding-left: 84px; }
     .li-page2 .li-hero h1 { font-size: 68px; }
@@ -1829,14 +1998,32 @@ function lightInstitutionalCss() {
     .li-flame svg { width: 76px; height: 84px; }
     .li-title-icon { display: inline-grid; place-items: center; width: 1.08em; height: 1.08em; margin-right: 6px; color: currentColor; vertical-align: -0.16em; }
     .li-title-icon svg { width: 1em; height: 1em; }
-    .li-dial-panel { left: 34px; right: 34px; top: 232px; height: 492px; padding: 22px 26px; }
-    .li-dial-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; height: calc(100% - 50px); }
-    .li-dial-card { display: flex; flex-direction: column; align-items: center; gap: 14px; }
-    .li-dial-card .sentiment-dial { grid-template-columns: 1fr; }
-    .li-dial-note { margin: 0; color: #2a2f37; font-size: 19px; line-height: 1.55; text-align: center; padding: 0 16px; }
-    .li-band-table { display: flex; flex-direction: column; gap: 10px; }
-    .li-band-table h3 { margin: 0 0 8px; color: #1a3050; font-size: 26px; font-weight: 900; }
-    .li-band-row { display: grid; grid-template-columns: 84px 1fr 1.6fr; align-items: center; padding: 10px 14px; border-radius: 6px; background: rgba(255,255,255,.46); border: 1px solid rgba(30,58,91,.18); color: #1d2227; font-size: 19px; }
+    .li-dial-panel { left: 34px; right: 34px; top: 224px; height: 424px; padding: 22px 26px; }
+    .li-dial-wrap { display: grid; grid-template-columns: 1fr 1.04fr; gap: 34px; align-items: start; height: calc(100% - 46px); }
+    .li-dial-card { display: flex; align-items: flex-start; justify-content: center; height: 100%; padding-top: 18px; }
+    .li-score-block { display: flex; flex-direction: column; align-items: center; width: 100%; }
+    .li-score-ring {
+      position: relative;
+      width: 188px;
+      height: 188px;
+      border-radius: 50%;
+      background: conic-gradient(currentColor var(--dial-dash, 0), rgba(35,47,60,.10) 0);
+      display: grid;
+      place-items: center;
+      color: #d8211d;
+    }
+    .li-score-ring::after { content: ""; position: absolute; inset: 12px; border-radius: 50%; background: rgba(255,255,255,.94); border: 1px solid rgba(30,58,91,.32); }
+    .li-score-ring.bullish { color: #d8211d; }
+    .li-score-ring.bullish-soft { color: #c48014; }
+    .li-score-ring.warning { color: #c48014; }
+    .li-score-ring.warning-soft { color: #0a8c68; }
+    .li-score-ring.bearish { color: #0a8c68; }
+    .li-score-ring span { position: relative; z-index: 1; color: #152b49; font-size: 66px; line-height: 1; font-weight: 900; }
+    .li-score-block strong { display: block; max-width: 100%; margin-top: 18px; color: #d8211d; font-size: 28px; line-height: 1.18; font-weight: 900; text-align: center; }
+    .li-score-block em { display: block; margin-top: 8px; color: #5b6068; font-size: 18px; line-height: 1; font-style: normal; font-weight: 700; letter-spacing: 2px; }
+    .li-band-table { display: flex; flex-direction: column; gap: 8px; }
+    .li-band-table h3 { margin: 0 0 6px; color: #1a3050; font-size: 26px; font-weight: 900; }
+    .li-band-row { display: grid; grid-template-columns: 84px 1fr 1.6fr; align-items: center; padding: 8px 14px; border-radius: 6px; background: rgba(255,255,255,.46); border: 1px solid rgba(30,58,91,.18); color: #1d2227; font-size: 19px; }
     .li-band-row span { font-weight: 900; font-size: 22px; text-align: center; }
     .li-band-row b { color: #1a3050; font-size: 21px; margin-left: 12px; }
     .li-band-row i { font-style: normal; color: #5b6068; font-size: 18px; }
@@ -1850,8 +2037,8 @@ function lightInstitutionalCss() {
     .li-band-row.warning-soft span { color: #0a8c68; }
     .li-band-row.bearish { border-color: rgba(10,140,104,.45); background: rgba(220,243,232,.6); }
     .li-band-row.bearish span { color: #0a8c68; }
-    .li-factor-panel { left: 34px; right: 34px; top: 742px; height: 426px; padding: 22px 26px; }
-    .li-factor-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 30px; margin-top: 18px; }
+    .li-factor-panel { left: 34px; right: 34px; top: 672px; height: 368px; padding: 22px 26px; }
+    .li-factor-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 30px; margin-top: 16px; }
     .factor-row { display: grid; grid-template-rows: auto auto; gap: 6px; min-height: 38px; }
     .factor-row > div { display: flex; align-items: center; justify-content: space-between; color: #1d2227; font-size: 18px; }
     .factor-row b { color: #1a3050; font-weight: 600; font-size: 18px; }
@@ -1861,49 +2048,49 @@ function lightInstitutionalCss() {
     .factor-row.bullish .bar i { background: linear-gradient(90deg, #e24b40, #d8211d); }
     .factor-row.warning .bar i { background: linear-gradient(90deg, #f1b95c, #d49b45); }
     .factor-row.bearish .bar i { background: linear-gradient(90deg, #1ab47b, #0e7e58); }
-    .li-signal-panel { left: 34px; right: 34px; top: 1176px; height: 200px; padding: 22px 26px; overflow: hidden; }
-    .li-signal-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
-    .li-signal-card { position: relative; height: 124px; padding: 12px 16px; border-radius: 7px; border: 1px solid rgba(30,58,91,.34); background: rgba(255,255,255,.55); overflow: hidden; }
+    .li-signal-panel { left: 34px; right: 34px; top: 1064px; height: 256px; padding: 22px 26px; overflow: hidden; }
+    .li-signal-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; height: calc(100% - 44px); }
+    .li-signal-card { position: relative; min-height: 166px; padding: 14px 16px; border-radius: 7px; border: 1px solid rgba(30,58,91,.34); background: rgba(255,255,255,.55); overflow: hidden; }
     .li-signal-card .li-title-icon { font-size: 24px; }
     .li-signal-card.bullish { border-color: rgba(216,33,29,.45); background: linear-gradient(180deg, rgba(255,236,232,.78), rgba(255,255,255,.55)); }
     .li-signal-card.bearish { border-color: rgba(10,140,104,.45); background: linear-gradient(180deg, rgba(220,243,232,.78), rgba(255,255,255,.55)); }
     .li-signal-card b { display: block; margin-top: 2px; color: #1a3050; font-size: 20px; }
     .li-signal-card ul { margin: 6px 0 0; padding: 0; list-style: none; }
-    .li-signal-card li { position: relative; margin: 2px 0; padding-left: 16px; color: #2a2f37; font-size: 15px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .li-signal-card li { position: relative; margin: 4px 0; padding-left: 16px; color: #2a2f37; font-size: 15px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     .li-signal-card li::before { content: ""; position: absolute; left: 0; top: 6px; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
     .li-signal-card.bullish li::before { background: #d8211d; }
     .li-signal-card.bearish li::before { background: #0a8c68; }
 
-    .li-page3 .li-hero { padding-top: 24px; padding-left: 84px; }
-    .li-page3 .li-hero h1 { font-size: 68px; }
-    .li-page3 .li-hero p { margin: 15px 0 0; color: #31343a; font-size: 25px; letter-spacing: 4px; }
-    .li-limit-panel { left: 34px; right: 34px; top: 212px; height: 340px; padding: 18px 22px; overflow: hidden; }
-    .li-metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 12px; }
-    .li-metric-box { height: 216px; border: 1px solid rgba(216,33,29,.36); border-radius: 8px; text-align: center; padding: 18px 10px; background: rgba(255,255,255,.46); overflow: hidden; }
+    .li-page3 .li-hero { padding-top: 24px; padding-left: 84px; height: 144px; }
+    .li-page3 .li-hero h1 { font-size: 66px; line-height: 1; margin: 0; }
+    .li-limit-panel { left: 34px; right: 34px; top: 240px; height: 310px; padding: 18px 22px; overflow: hidden; }
+    .li-metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 10px; }
+    .li-metric-box { height: 198px; border: 1px solid rgba(216,33,29,.36); border-radius: 8px; text-align: center; padding: 16px 10px 14px; background: rgba(255,255,255,.46); overflow: hidden; display: flex; flex-direction: column; align-items: center; }
     .li-metric-box.bearish { border-color: rgba(10,157,112,.32); }
     .li-metric-box span { display: block; color: #32363b; font-size: 22px; }
-    .li-metric-box strong { display: block; margin-top: 12px; color: #d8211d; font-size: 58px; line-height: 1; font-weight: 500; }
+    .li-metric-box strong { display: block; margin-top: 10px; color: #d8211d; font-size: 54px; line-height: .98; font-weight: 500; }
     .li-metric-box.bearish strong { color: #0c9c75; }
-    .li-metric-box em { display: block; margin-top: 10px; color: #3f444a; font-size: 18px; font-style: normal; }
-    .li-metric-box .metric-compare, .li-ladder-card .metric-compare { margin-top: 10px; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; max-width: 100%; color: #6a6f76; background: transparent; font-size: 16px; font-weight: 600; line-height: 1.25; }
+    .li-metric-box em { display: block; margin-top: auto; color: #3f444a; font-size: 16px; line-height: 1.1; font-style: normal; font-weight: 600; min-height: 18px; }
+    .li-metric-box em.empty-sub { visibility: hidden; }
+    .li-metric-box .metric-compare, .li-ladder-card .metric-compare { margin-top: 8px; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; max-width: 100%; color: #6a6f76; background: transparent; font-size: 16px; font-weight: 700; line-height: 1.15; }
     .li-metric-box .metric-compare.bullish, .li-ladder-card .metric-compare.bullish { color: #d8211d; background: transparent; }
     .li-metric-box .metric-compare.bearish, .li-ladder-card .metric-compare.bearish { color: #0c9c75; background: transparent; }
     .li-metric-box .metric-compare.warning, .li-ladder-card .metric-compare.warning { color: #a0742d; background: transparent; }
     .li-limit-foot { display: flex; justify-content: space-between; margin-top: 12px; color: #5b6068; font-size: 14px; }
-    .li-theme-panel { left: 34px; right: 34px; top: 568px; height: 340px; padding: 22px 22px; overflow: hidden; }
-    .li-theme-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px; height: calc(100% - 50px); align-items: stretch; }
+    .li-theme-panel { left: 34px; right: 34px; top: 568px; height: 300px; padding: 20px 22px; overflow: hidden; }
+    .li-theme-grid { display: grid; grid-template-columns: 1.38fr 1fr; gap: 24px; height: 100%; align-items: stretch; }
     .li-theme-col { display: flex; flex-direction: column; min-height: 0; }
-    .li-theme-col h3 { margin: 0 0 8px; color: #1a3050; font-size: 22px; font-weight: 900; }
-    .li-theme-col h3 em { font-style: normal; color: #5b6068; font-size: 16px; margin-left: 8px; font-weight: 600; }
+    .li-theme-col h3 { margin: 0 0 8px; color: #1a3050; font-size: 21px; line-height: 1.1; font-weight: 900; }
+    .li-theme-col h3 em { font-style: normal; color: #5b6068; font-size: 15px; margin-left: 8px; font-weight: 600; }
     /* 题材领涨/领跌：固定 5 行布局（1 行 header + 5 行数据），行号对齐 */
-    .li-theme-col .theme-bars { display: grid; grid-template-rows: auto repeat(5, 1fr); gap: 5px; flex: 1; min-height: 0; }
-    .li-theme-col .theme-bar-row { display: grid; align-items: center; gap: 8px; font-size: 16px; color: #1d2227; min-height: 0; line-height: 1.15; }
-    .li-theme-col .theme-bars.gainers .theme-bar-row { grid-template-columns: 90px 1fr 50px; }
-    .li-theme-col .theme-bars.losers .theme-bar-row { grid-template-columns: 90px 1fr; }
-    .li-theme-col .theme-bar-header { font-size: 15px; color: #5b6068; font-weight: 700; border-bottom: 1px solid rgba(30,58,91,.18); padding: 0 0 5px; min-height: 22px; }
+    .li-theme-col .theme-bars { display: grid; grid-template-rows: 24px repeat(5, 1fr); gap: 4px; flex: 1; min-height: 0; }
+    .li-theme-col .theme-bar-row { display: grid; align-items: center; gap: 8px; font-size: 15px; color: #1d2227; min-height: 0; line-height: 1.1; }
+    .li-theme-col .theme-bars.gainers .theme-bar-row { grid-template-columns: 160px 1fr 74px; }
+    .li-theme-col .theme-bars.losers .theme-bar-row { grid-template-columns: 130px 1fr; }
+    .li-theme-col .theme-bar-header { font-size: 14px; color: #5b6068; font-weight: 700; border-bottom: 1px solid rgba(30,58,91,.18); padding: 0 0 4px; min-height: 22px; }
     .li-theme-col .theme-bar-header em, .li-theme-col .theme-bar-header span { font-weight: 700; }
     .li-theme-col .theme-bar-row span { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .li-theme-col .theme-bar-row em { font-style: normal; text-align: right; font-size: 16px; font-weight: 700; }
+    .li-theme-col .theme-bar-row em { font-style: normal; text-align: right; font-size: 15px; font-weight: 700; }
     .li-theme-col .theme-bar-placeholder { color: rgba(29,34,39,.30); }
     .li-theme-col .theme-bar-placeholder span, .li-theme-col .theme-bar-placeholder em { font-weight: 500; }
     .li-theme-col .bar-track { position: relative; display: flex; align-items: center; min-width: 0; height: 16px; column-gap: 6px; }
@@ -1918,32 +2105,35 @@ function lightInstitutionalCss() {
     .li-theme-col .theme-bar-placeholder .bar-track b { background: rgba(30,58,91,.10) !important; box-shadow: none; }
     .li-theme-col .theme-bar-placeholder .bar-track u { color: rgba(29,34,39,.30); }
     .li-theme-col .theme-empty { color: #98a0a6; font-size: 14px; padding: 12px 0; text-align: center; font-style: italic; }
-    .li-deep-panel { left: 34px; right: 34px; top: 924px; height: 416px; padding: 0; overflow: hidden; }
-    .li-deep-panel .theme-deep-dive { position: absolute; inset: 18px 22px; }
-    .li-deep-panel .theme-deep-dive .deep-dive-header h2 { color: #1a3050; font-size: 26px; margin: 0; }
-    .li-deep-panel .theme-deep-dive .deep-dive-header span { color: #5b6068; font-size: 15px; }
+    .li-deep-panel { left: 34px; right: 34px; top: 884px; height: 386px; padding: 0; overflow: hidden; }
+    .li-deep-panel .theme-deep-dive { position: absolute; inset: 16px 22px; }
+    .li-deep-panel .theme-deep-dive .deep-dive-header h2 { color: #1a3050; font-size: 24px; margin: 0; }
+    .li-deep-panel .theme-deep-dive .deep-dive-header span { color: #5b6068; font-size: 14px; }
     .li-deep-panel .deep-dive-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; height: 100%; }
-    .li-deep-panel .theme-deep-dive.single .deep-dive-grid { grid-template-columns: 1fr; }
-    .li-deep-panel .deep-dive-card { padding: 14px 16px; border: 1px solid rgba(30,58,91,.34); background: rgba(255,255,255,.46); border-radius: 6px; overflow: hidden; min-height: 0; display: flex; flex-direction: column; }
+    .li-deep-panel .theme-deep-dive.single .deep-dive-grid { grid-template-columns: 1fr; height: 100%; }
+    .li-deep-panel .deep-dive-card { padding: 12px 14px; border: 1px solid rgba(30,58,91,.34); background: rgba(255,255,255,.46); border-radius: 6px; overflow: hidden; min-height: 0; display: flex; flex-direction: column; }
     .li-deep-panel .deep-dive-card.bullish { border-color: rgba(216,33,29,.40); }
     .li-deep-panel .deep-dive-card.bearish { border-color: rgba(10,140,104,.40); }
-    .li-deep-panel .deep-dive-card h2 { color: #1a3050; font-size: 20px; margin: 0 0 10px; }
+    .li-deep-panel .deep-dive-card h2 { color: #1a3050; font-size: 22px; margin: 0 0 9px; }
     .li-deep-panel .deep-dive-items { display: grid; gap: 8px; min-height: 0; flex: 1; align-content: start; }
-    .li-deep-panel .deep-dive-item { padding: 12px 14px; border: 1px solid rgba(30,58,91,.20); background: rgba(255,255,255,.62); border-radius: 5px; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
+    .li-deep-panel .theme-deep-dive.single .deep-dive-items { flex: 1; }
+    .li-deep-panel .deep-dive-item { padding: 12px 16px; border: 1px solid rgba(30,58,91,.20); background: rgba(255,255,255,.62); border-radius: 5px; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
+    .li-deep-panel .theme-deep-dive.single .deep-dive-item { min-height: 0; height: 100%; justify-content: space-between; }
     .li-deep-panel .deep-dive-title { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-    .li-deep-panel .deep-dive-title h3 { color: #1a3050; font-size: 20px; font-weight: 800; margin: 0; }
+    .li-deep-panel .deep-dive-title h3 { color: #1a3050; font-size: 23px; font-weight: 800; margin: 0; }
     .li-deep-panel .deep-dive-card.bullish .deep-dive-title h3 { color: #d6211d; }
     .li-deep-panel .deep-dive-card.bearish .deep-dive-title h3 { color: #0a8a68; }
-    .li-deep-panel .deep-dive-stage { background: rgba(176,116,42,.18); color: #a0742d; padding: 3px 10px; font-size: 14px; border-radius: 999px; }
-    .li-deep-panel .deep-dive-analysis { color: #2a2f37; font-size: 15px; line-height: 1.55; text-align: justify; margin: 0; }
-    .li-deep-panel .deep-dive-judgment, .li-deep-panel .deep-dive-narrative { color: #2a2f37; font-size: 15px; line-height: 1.5; margin: 4px 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; }
+    .li-deep-panel .deep-dive-stage { background: rgba(176,116,42,.18); color: #a0742d; padding: 4px 11px; font-size: 15px; border-radius: 999px; }
+    .li-deep-panel .deep-dive-analysis { color: #2a2f37; font-size: 17px; line-height: 1.58; text-align: justify; margin: 0; }
+    .li-deep-panel .deep-dive-judgment, .li-deep-panel .deep-dive-narrative { color: #2a2f37; font-size: 16px; line-height: 1.45; margin: 4px 0; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; }
     .li-deep-panel .deep-dive-judgment b, .li-deep-panel .deep-dive-narrative b { color: #1a3050; }
-    .li-deep-panel .deep-dive-signals { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
-    .li-deep-panel .deep-dive-signal { display: flex; gap: 4px; padding: 6px 8px; border-radius: 4px; background: rgba(255,255,255,.62); color: #2a2f37; font-size: 14px; line-height: 1.35; }
+    .li-deep-panel .deep-dive-signals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+    .li-deep-panel .deep-dive-signal { display: flex; gap: 5px; padding: 8px 10px; border-radius: 4px; background: rgba(255,255,255,.62); color: #2a2f37; font-size: 16px; line-height: 1.38; }
     .li-deep-panel .deep-dive-signal b { color: #1a3050; }
     .li-deep-panel .deep-dive-signal.bullish { border-left: 2px solid #d8211d; }
     .li-deep-panel .deep-dive-signal.bearish { border-left: 2px solid #0c9c75; }
     .li-deep-panel .deep-dive-compact-signals { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; color: #2a2f37; font-size: 14px; }
+    .li-deep-panel .deep-dive-signals, .li-deep-panel .deep-dive-compact-signals { flex-shrink: 0; }
     .li-deep-panel .deep-dive-compact-signals b { color: #1a3050; }
     .li-deep-panel .deep-dive-item.compact .deep-dive-judgment { -webkit-line-clamp: 1; line-clamp: 1; }
     .li-deep-panel .deep-dive-item.compact .deep-dive-narrative { -webkit-line-clamp: 1; line-clamp: 1; }
@@ -1952,9 +2142,23 @@ function lightInstitutionalCss() {
     .li-page4 .li-hero h1 { font-size: 62px; margin: 0; }
     .li-page4-meta { display: flex; align-items: center; gap: 18px; margin-top: 20px; color: #31343a; font-size: 21px; letter-spacing: 4px; }
     .li-page4-meta i { display: block; width: 60px; height: 6px; background: #d8211d; }
-    .li-ladder-head { left: 34px; right: 34px; top: 250px; height: 200px; padding: 18px 22px; }
-    .li-ladder-metrics { display: grid; grid-template-columns: 1fr 1fr 1.25fr; gap: 18px; height: calc(100% - 50px); }
-    .li-ladder-card { padding: 18px 22px; border: 1px solid rgba(30,58,91,.34); border-radius: 8px; background: rgba(255,255,255,.46); text-align: center; display: flex; flex-direction: column; justify-content: center; gap: 6px; min-height: 142px; }
+    .li-page4 .li-panel {
+      background:
+        radial-gradient(circle at 96% 0%, rgba(176,131,64,.10), transparent 34%),
+        linear-gradient(180deg, rgba(255,255,255,.84), rgba(255,255,255,.54));
+      border-color: rgba(30,58,91,.46);
+      box-shadow: 0 10px 24px rgba(30,46,64,.08), inset 0 1px 0 rgba(255,255,255,.72);
+    }
+    .li-page4 .li-panel > h2 { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; font-size: 31px; line-height: 1; letter-spacing: 0; }
+    .li-page4 .li-panel > h2::before { display: none; }
+    .li-section-icon { flex: 0 0 auto; width: 34px; height: 34px; display: inline-grid; place-items: center; color: #d8211d; border: 1px solid rgba(176,131,64,.52); border-radius: 7px; background: linear-gradient(135deg, rgba(255,255,255,.88), rgba(238,222,194,.58)); box-shadow: inset 0 1px 0 rgba(255,255,255,.85), 0 5px 10px rgba(176,131,64,.10); }
+    .li-section-icon svg { width: 25px; height: 25px; display: block; }
+    .li-section-icon.ladder { color: #1a3050; }
+    .li-section-icon.roles { color: #d8211d; }
+    .li-section-icon.watch { color: #1a3050; }
+    .li-ladder-head { left: 34px; right: 34px; top: 250px; height: 242px; padding: 20px 24px 24px; }
+    .li-ladder-metrics { display: grid; grid-template-columns: 1fr 1fr 1.25fr; gap: 18px; height: calc(100% - 52px); }
+    .li-ladder-card { padding: 12px 24px; border: 1px solid rgba(30,58,91,.26); border-radius: 8px; background: linear-gradient(180deg, rgba(255,255,255,.82), rgba(255,255,255,.48)); text-align: center; display: flex; flex-direction: column; justify-content: center; gap: 6px; min-height: 0; box-shadow: inset 0 1px 0 rgba(255,255,255,.72); }
     .li-ladder-card span { color: #5b6068; font-size: 18px; }
     .li-ladder-card strong { color: #1a3050; font-size: 44px; line-height: 1.1; font-weight: 900; letter-spacing: 1px; }
     .li-ladder-card em { font-size: 18px; font-style: normal; color: #5b6068; }
@@ -1964,36 +2168,37 @@ function lightInstitutionalCss() {
     .li-ladder-card-featured::after { bottom: 8px; }
     .li-ladder-card-featured span { color: #b08340; font-size: 16px; letter-spacing: 4px; }
     .li-ladder-card-featured strong { color: #1a3050; font-size: 40px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-    .li-ladder-strip { left: 34px; right: 34px; top: 460px; height: 300px; padding: 18px 22px; overflow: hidden; }
-    .li-ladder-rows { display: grid; gap: 8px; }
-    .li-ladder-row { display: grid; grid-template-columns: 80px 1fr; align-items: center; min-height: 54px; padding: 0 14px; border-radius: 6px; background: linear-gradient(90deg, rgba(176,116,42,.10), rgba(255,255,255,.42)); border: 1px solid rgba(30,58,91,.16); }
-    .li-ladder-row b { color: #a0742d; font-size: 26px; font-weight: 900; }
-    .li-ladder-row span { color: #1d2227; font-size: 20px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .li-ladder-row span em { color: #5b6068; font-style: normal; margin-left: 8px; font-size: 17px; }
-    .li-roles-panel { left: 34px; right: 34px; top: 750px; height: 420px; padding: 18px 22px; }
-    .li-roles-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; height: calc(100% - 50px); align-items: stretch; }
-    .role-card { padding: 14px 14px; border: 1px solid rgba(30,58,91,.34); border-radius: 8px; background: rgba(255,255,255,.46); display: flex; flex-direction: column; justify-content: center; }
-    .role-card h2 { margin: 0 0 10px; color: #1a3050; font-size: 20px; font-weight: 800; }
+    .li-ladder-strip { left: 34px; right: 34px; top: 510px; height: 242px; padding: 18px 22px; overflow: hidden; }
+    .li-ladder-rows { display: grid; grid-template-rows: repeat(4, minmax(0, 1fr)); gap: 6px; height: calc(100% - 48px); min-height: 0; }
+    .li-ladder-row { display: grid; grid-template-columns: 74px minmax(0, 1fr); align-items: center; min-height: 0; padding: 0 12px; border-radius: 6px; background: linear-gradient(90deg, rgba(176,116,42,.14), rgba(255,255,255,.56)); border: 1px solid rgba(30,58,91,.16); box-shadow: inset 0 1px 0 rgba(255,255,255,.7); }
+    .li-ladder-row b { color: #a0742d; font-size: 24px; font-weight: 900; }
+    .li-ladder-row span { min-width: 0; color: #1d2227; font-size: 18px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .li-ladder-row span em { color: #5b6068; font-style: normal; margin-left: 7px; font-size: 16px; }
+    .li-roles-panel { left: 34px; right: 34px; top: 768px; height: 364px; padding: 17px 22px; }
+    .li-roles-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; height: calc(100% - 48px); align-items: stretch; }
+    .role-card { padding: 13px 15px; border: 1px solid rgba(30,58,91,.28); border-radius: 8px; background: linear-gradient(180deg, rgba(255,255,255,.76), rgba(255,255,255,.46)); display: flex; flex-direction: column; justify-content: center; box-shadow: inset 0 1px 0 rgba(255,255,255,.70); min-width: 0; }
+    .role-card h2 { margin: 0 0 8px; color: #1a3050; font-size: 22px; font-weight: 900; letter-spacing: 0; }
     .role-card.bullish { border-color: rgba(216,33,29,.40); }
     .role-card.warning { border-color: rgba(216,138,30,.40); }
     .role-card.bearish { border-color: rgba(10,140,104,.40); }
-    .leader-row { display: flex; align-items: center; gap: 6px; margin: 6px 0; font-size: 17px; color: #1d2227; }
-    .leader-row b { color: #1a3050; font-weight: 700; }
-    .leader-row em { color: #5b6068; font-style: normal; font-size: 15px; }
-    .li-watch-panel { left: 34px; right: 34px; top: 1180px; height: 200px; padding: 18px 22px; }
+    .leader-row { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); align-items: center; column-gap: 7px; margin: 5px 0; font-size: 17px; line-height: 1.25; color: #1d2227; min-width: 0; }
+    .leader-row b { color: #1a3050; font-weight: 700; white-space: nowrap; overflow: visible; }
+    .leader-row span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .leader-row em { color: #5b6068; font-style: normal; font-size: 16px; font-weight: 800; }
+    .li-watch-panel { left: 34px; right: 34px; top: 1150px; height: 190px; padding: 17px 22px; }
     .li-watch-panel h2 { display: flex; align-items: center; gap: 8px; }
-    .li-watch-panel h2::before { content: ""; display: inline-block; width: 5px; height: 24px; background: #d8211d; border-radius: 2px; }
-    .li-watch-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; height: calc(100% - 50px); align-items: stretch; }
-    .li-watch-grid > div { padding: 14px 18px; border: 1px solid rgba(30,58,91,.28); border-radius: 6px; background: rgba(255,255,255,.62); overflow: hidden; display: flex; flex-direction: column; gap: 6px; }
+    .li-watch-panel h2::before { display: none; }
+    .li-watch-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; height: calc(100% - 48px); align-items: stretch; }
+    .li-watch-grid > div { padding: 12px 14px; border: 1px solid rgba(30,58,91,.26); border-radius: 6px; background: rgba(255,255,255,.66); overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
     .li-watch-grid > div.bullish { border-color: rgba(216,33,29,.38); }
     .li-watch-grid > div.warning { border-color: rgba(176,116,42,.38); }
     .li-watch-grid > div.bearish { border-color: rgba(10,140,104,.38); }
-    .li-watch-grid b { display: flex; align-items: center; gap: 10px; color: #1a3050; font-size: 22px; font-weight: 900; letter-spacing: 1px; }
-    .li-watch-grid b i { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 4px; background: rgba(30,58,91,.10); color: #1a3050; font-size: 14px; font-style: normal; font-weight: 900; font-family: "Times New Roman", SimSun, serif; }
+    .li-watch-grid b { display: flex; align-items: center; gap: 8px; color: #1a3050; font-size: 20px; line-height: 1; font-weight: 900; letter-spacing: 1px; }
+    .li-watch-grid b i { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 4px; background: rgba(30,58,91,.10); color: #1a3050; font-size: 13px; font-style: normal; font-weight: 900; font-family: "Times New Roman", SimSun, serif; }
     .li-watch-grid > div.bullish b i { background: rgba(216,33,29,.14); color: #b21916; }
     .li-watch-grid > div.warning b i { background: rgba(176,116,42,.16); color: #8a5d22; }
     .li-watch-grid > div.bearish b i { background: rgba(10,140,104,.14); color: #0a6e54; }
-    .li-watch-grid p { margin: 0; color: #2a2f37; font-size: 15px; line-height: 1.5; }
+    .li-watch-grid p { margin: 0; color: #2a2f37; font-size: 14px; line-height: 1.42; display: -webkit-box; -webkit-line-clamp: 4; line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 
     .bullish { color: #d8211d !important; }
     .bearish { color: #0a8c68 !important; }
@@ -2199,6 +2404,7 @@ function darkTerminalPage1(data) {
   const state = data.emotion_model_v1?.state ?? '分歧震荡';
   const heroHeadline = data.market_summary?.headline ?? '';
   const heroSubtitle = data.market_summary?.style_shift ?? data.market_summary?.action ?? '';
+  const features = data.market_summary?.features ?? [];
   const capitalRows = [
     [data.capital_flow?.metric_name ?? '主力资金', data.capital_flow?.net_text ?? '--'],
     ['北向资金', data.capital_flow?.northbound_text ?? '--']
@@ -2226,7 +2432,7 @@ function darkTerminalPage1(data) {
           <div class="dt-breadth-count dt-up"><span>上涨家数</span><strong>${escapeHtml(up)}</strong><em>${upPct}%</em></div>
           <div class="dt-breadth-count dt-down"><span>下跌家数</span><strong>${escapeHtml(down)}</strong><em>${downPct}%</em></div>
           <div class="dt-breadth-bar"><i class="bullish-bg" style="width:${upPct}%"></i><i class="bearish-bg" style="width:${downPct}%"></i></div>
-          <div class="dt-breadth-foot"><span>涨跌比　${escapeHtml(data.breadth?.ratio_text?.replace('涨跌比 ', '') ?? '--')}</span><span>${escapeHtml(data.breadth?.notable ?? '')}</span><span>涨停　<b class="bullish">${escapeHtml(data.limit_up?.limit_up ?? '--')}</b></span><span>跌停　<b class="bearish">${escapeHtml(data.limit_up?.limit_down ?? '--')}</b></span></div>
+          <div class="dt-breadth-foot" data-fit><span data-fit>涨跌比　${escapeHtml(data.breadth?.ratio_text?.replace('涨跌比 ', '') ?? '--')}</span><span class="dt-breadth-note" data-fit>${escapeHtml(data.breadth?.notable ?? '')}</span><span data-fit>涨停　<b class="bullish">${escapeHtml(data.limit_up?.limit_up ?? '--')}</b></span><span data-fit>跌停　<b class="bearish">${escapeHtml(data.limit_up?.limit_down ?? '--')}</b></span></div>
         </section>
         <section class="dt-panel dt-turnover-panel">
           <div class="dt-round cyan">${darkTerminalIcon('coin')}</div>
@@ -2243,7 +2449,9 @@ function darkTerminalPage1(data) {
           <div class="dt-round filled">${darkTerminalIcon('chat')}</div>
           <div>
             <h2>核心观点</h2>
-            <p>${escapeHtml(data.market_summary?.action ?? '')}</p>
+            <ul>
+              ${(features.length ? features : [data.market_summary?.action ?? '']).slice(0, 3).map((f) => `<li>${escapeHtml(f)}</li>`).join('')}
+            </ul>
           </div>
         </section>
         <footer class="dt-footer">数据来源：公开市场数据　｜　仅供复盘，不构成投资建议</footer>
@@ -2265,7 +2473,17 @@ function darkTerminalPage2(data) {
         <section class="dt-panel dt-dial-panel">
           <h2>情绪分 / 状态</h2>
           <div class="dt-dial-wrap">
-            ${sentimentDial(data.emotion_model_v1?.score ?? 0, data.emotion_model_v1?.state ?? '--')}
+            <div class="dt-dial-card">
+              ${dialRing(data.emotion_model_v1?.score ?? 0, data.emotion_model_v1?.state ?? '--')}
+            </div>
+            <div class="dt-band-table">
+              <h3>情绪分区间含义</h3>
+              <div class="dt-band-row bullish"><span>70-84</span><b>主线扩散</b><i>主线进入明确扩散阶段</i></div>
+              <div class="dt-band-row bullish-soft"><span>55-69</span><b>修复初期</b><i>情绪由分歧向修复过渡</i></div>
+              <div class="dt-band-row warning"><span>40-54</span><b>分歧震荡</b><i>主线不清晰，热点快速轮动</i></div>
+              <div class="dt-band-row warning-soft"><span>25-39</span><b>弱修复</b><i>局部修复但缺乏共振</i></div>
+              <div class="dt-band-row bearish"><span>0-24</span><b>冰点</b><i>情绪冰点，等待方向选择</i></div>
+            </div>
           </div>
         </section>
         <section class="dt-panel dt-factor-panel">
@@ -2288,7 +2506,8 @@ function darkTerminalPage2(data) {
 }
 
 function darkTerminalPage3(data) {
-  const conceptCounts = (data.themes?.concept_counts ?? []).slice(0, 12);
+  const gainerItems = themeGainerItems(data).slice(0, 12);
+  const loserItems = themeLoserItems(data).slice(0, 12);
   const interpretation = data.theme_interpretation ?? {};
   const sections = themeDeepDiveSections(interpretation);
   return `
@@ -2301,10 +2520,10 @@ function darkTerminalPage3(data) {
         <section class="dt-panel dt-limit-panel">
           <h2>涨跌停与封板结构</h2>
           <div class="dt-metrics">
-            ${darkTerminalMetricBox('涨停家数', String(data.limit_up?.limit_up ?? '--'), data.limit_up?.display口径 ?? '', 'bullish', metricCompare(data.limit_up?.limit_up, data.limit_up?.previous_day?.limit_up, '只', { favorableIncrease: true }))}
-            ${darkTerminalMetricBox('跌停家数', String(data.limit_up?.limit_down ?? '--'), '', 'bearish', metricCompare(data.limit_up?.limit_down, data.limit_up?.previous_day?.limit_down, '只', { favorableIncrease: false }))}
-            ${darkTerminalMetricBox('封板率', `${data.limit_up?.seal_rate_pct ?? '--'}%`, `炸板${data.limit_up?.broken_board ?? '--'}只`, 'bullish', metricCompare(data.limit_up?.seal_rate_pct, data.limit_up?.previous_day?.seal_rate_pct, '%', { deltaUnit: 'pct', previousUnit: '%', favorableIncrease: true }))}
-            ${darkTerminalMetricBox('连板高度', `${data.ladder?.highest_non_st_board ?? '--'}连板`, data.ladder?.boards?.[0]?.stocks?.[0]?.name ?? '', 'bullish')}
+            ${darkTerminalMetricBox('涨停', String(data.limit_up?.limit_up ?? '--'), data.limit_up?.display口径 ?? '', 'bullish', metricCompare(data.limit_up?.limit_up, data.limit_up?.previous_day?.limit_up, '只', { favorableIncrease: true }))}
+            ${darkTerminalMetricBox('跌停', String(data.limit_up?.limit_down ?? '--'), '', 'bearish', metricCompare(data.limit_up?.limit_down, data.limit_up?.previous_day?.limit_down, '只', { favorableIncrease: false }))}
+            ${darkTerminalMetricBox('炸板', String(data.limit_up?.broken_board ?? '--'), '', 'bearish', metricCompare(data.limit_up?.broken_board, data.limit_up?.previous_day?.broken_board, '只', { favorableIncrease: false }))}
+            ${darkTerminalMetricBox('封板率', `${data.limit_up?.seal_rate_pct ?? '--'}%`, '', 'bullish', metricCompare(data.limit_up?.seal_rate_pct, data.limit_up?.previous_day?.seal_rate_pct, '%', { deltaUnit: 'pct', previousUnit: '%', favorableIncrease: true }))}
           </div>
           <div class="dt-limit-foot">
             <span>展示口径　${escapeHtml(data.limit_up?.display口径 ?? '非ST短线口径')}</span>
@@ -2314,12 +2533,12 @@ function darkTerminalPage3(data) {
         <section class="dt-panel dt-theme-panel">
           <div class="dt-theme-grid">
             <div class="dt-theme-col dt-theme-col-gainers">
-              <h3>领涨TOP <em>涨幅口径</em></h3>
-              ${topGainersThemeBars(conceptCounts, 5)}
+              <h3>领涨TOP <em>${themeGainerCaption(gainerItems)}</em></h3>
+              ${topGainersThemeBars(gainerItems, 5)}
             </div>
             <div class="dt-theme-col dt-theme-col-losers">
-              <h3>领跌TOP <em>跌幅口径</em></h3>
-              ${topLosersThemeBars(conceptCounts, 5)}
+              <h3>领跌TOP <em>${themeLoserCaption(loserItems)}</em></h3>
+              ${topLosersThemeBars(loserItems, 5)}
             </div>
           </div>
         </section>
@@ -2336,7 +2555,7 @@ function darkTerminalPage4(data) {
   const boards = ladderBoardsSorted(data);
   const topBoards = boards.slice(0, 4);
   const roles = data.leader_roles ?? {};
-  const roleKeys = ['空间龙', '板块龙头', '容量中军', '核心助攻', '中位接力', '补涨前排', '首板前排', '风险负反馈'];
+  const roleKeys = DISPLAY_LEADER_ROLE_KEYS;
   return `
     <section class="poster dt-poster dt-page4" data-page="4" data-title="强势板块龙头梯队">
       <div class="dt-shell">
@@ -2479,13 +2698,14 @@ function darkTerminalCss() {
     .dt-down { right: 18px; text-align: right; }
     .dt-up strong, .dt-up em { color: #ff5763; }
     .dt-down strong, .dt-down em { color: #3edf9a; }
-    .dt-breadth-bar { position: absolute; left: 140px; right: 140px; top: 110px; height: 40px; display: flex; border-radius: 999px; overflow: hidden; background: rgba(255,255,255,.12); box-shadow: inset 0 2px 8px rgba(0,0,0,.42); }
+    .dt-breadth-bar { position: absolute; left: 150px; right: 150px; top: 118px; height: 34px; display: flex; border-radius: 999px; overflow: hidden; background: rgba(255,255,255,.12); box-shadow: inset 0 2px 8px rgba(0,0,0,.42); }
     .dt-breadth-bar i:first-child { border-radius: 999px 0 0 999px; }
     .dt-breadth-bar i:nth-child(2) { border-radius: 0 999px 999px 0; }
-    .dt-breadth-foot { position: absolute; left: 130px; right: 130px; bottom: 30px; display: grid; grid-template-columns: 1fr 1fr .7fr .7fr; color: #d3d8da; font-size: 22px; text-align: center; }
-    .dt-breadth-foot span { border-right: 1px solid rgba(185,191,193,.34); }
+    .dt-breadth-foot { position: absolute; left: 150px; right: 150px; top: 164px; height: 80px; display: grid; grid-template-columns: .95fr 1.35fr .7fr .7fr; align-items: stretch; color: #d3d8da; font-size: 17px; line-height: 1.24; text-align: center; overflow: hidden; }
+    .dt-breadth-foot span { min-width: 0; padding: 0 10px; border-right: 1px solid rgba(185,191,193,.34); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .dt-breadth-foot .dt-breadth-note { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; align-self: center; text-align: center; overflow: hidden; overflow-wrap: anywhere; word-break: break-word; }
     .dt-breadth-foot span:last-child { border-right: 0; }
-    .dt-breadth-foot b { font-size: 24px; }
+    .dt-breadth-foot b { font-size: 19px; }
     .dt-turnover-panel { left: 16px; top: 914px; width: 472px; height: 218px; display: grid; grid-template-columns: 68px 1fr; gap: 20px; padding: 30px 22px; }
     .dt-money-panel { left: 493px; right: 16px; top: 914px; height: 218px; display: grid; grid-template-columns: 68px 1fr; gap: 20px; padding: 24px 22px; }
     .dt-round { width: 68px; height: 68px; border-radius: 50%; border: 1.5px solid currentColor; display: grid; place-items: center; }
@@ -2502,7 +2722,9 @@ function darkTerminalCss() {
     .dt-money-panel h2 em { color: #d3d0c8; font-size: 22px; font-style: normal; font-weight: 400; }
     .dt-money-panel p { display: flex; justify-content: space-between; margin: 8px 0 0; padding-bottom: 4px; border-bottom: 1px solid rgba(185,191,193,.16); color: #d3d8da; font-size: 21px; }
     .dt-view-panel { left: 16px; right: 16px; top: 1142px; height: 230px; display: grid; grid-template-columns: 72px 1fr; gap: 16px; padding: 24px 22px; }
-    .dt-view-panel p { margin: 6px 0 0; color: #dfe5e0; font-size: 22px; line-height: 1.4; }
+    .dt-view-panel ul { margin: 8px 0 0; padding: 0; list-style: none; }
+    .dt-view-panel li { position: relative; margin: 10px 0; padding-left: 20px; color: #dfe5e0; font-size: 21px; line-height: 1.34; }
+    .dt-view-panel li::before { content: ""; position: absolute; left: 0; top: .55em; width: 8px; height: 8px; border-radius: 50%; background: #ff5763; box-shadow: 0 0 12px rgba(255,87,99,.42); }
     .dt-footer { position: absolute; left: 16px; right: 16px; bottom: 8px; color: #d3d8da; font-size: 18px; text-align: center; letter-spacing: 1px; }
 
     .dt-p2-head { position: absolute; left: 20px; right: 20px; top: 30px; height: 100px; text-align: center; }
@@ -2510,7 +2732,28 @@ function darkTerminalCss() {
     .dt-p2-head h1 span { color: #bff3ff; }
     .dt-p2-head p { justify-content: center; margin-top: 10px; }
     .dt-dial-panel { left: 16px; right: 16px; top: 165px; height: 492px; padding: 22px 26px; }
-    .dt-dial-wrap { display: grid; grid-template-columns: 320px 1fr; gap: 24px; align-items: center; height: calc(100% - 50px); }
+    .dt-dial-wrap { display: grid; grid-template-columns: 430px 1fr; gap: 34px; align-items: center; height: calc(100% - 50px); }
+    .dt-dial-card { height: 100%; display: grid; place-items: center; border-radius: 6px; background: radial-gradient(circle at 50% 40%, rgba(75,186,255,.08), rgba(255,255,255,.02) 62%, rgba(0,0,0,.08)); }
+    .dt-dial-card .dial-ring-wrap { display: grid; justify-items: center; gap: 14px; }
+    .dt-dial-card .dial-ring { width: 250px; height: 250px; }
+    .dt-dial-card .dial-value { font-size: 74px; }
+    .dt-dial-card .dial-state { bottom: 44px; font-size: 20px; color: #ffd075; }
+    .dt-dial-card .dial-foot { bottom: 18px; font-size: 17px; color: #9da3a3; }
+    .dt-dial-card .dial-band-tag { padding: 5px 18px; border: 1px solid rgba(244,193,93,.54); border-radius: 999px; color: #ffd075; background: rgba(8,18,25,.72); font-size: 18px; font-weight: 900; letter-spacing: 3px; }
+    .dt-band-table { display: flex; flex-direction: column; gap: 8px; }
+    .dt-band-table h3 { margin: 0 0 6px; color: #f5cd6b; font-size: 26px; font-weight: 900; }
+    .dt-band-row { display: grid; grid-template-columns: 86px 1fr 1.65fr; align-items: center; padding: 9px 14px; border-radius: 6px; background: rgba(8,18,25,.58); border: 1px solid rgba(132,160,178,.36); color: #dfe5e0; font-size: 18px; }
+    .dt-band-row span { text-align: center; font-size: 22px; font-weight: 900; }
+    .dt-band-row b { color: #efe1c1; font-size: 21px; margin-left: 10px; }
+    .dt-band-row i { color: #9da3a3; font-size: 17px; font-style: normal; }
+    .dt-band-row.bullish { border-color: rgba(255,87,99,.52); background: linear-gradient(90deg, rgba(116,30,27,.42), rgba(8,18,25,.58)); }
+    .dt-band-row.bullish span { color: #ff5763; }
+    .dt-band-row.bullish-soft { border-color: rgba(255,208,117,.50); background: linear-gradient(90deg, rgba(97,67,19,.42), rgba(8,18,25,.58)); }
+    .dt-band-row.bullish-soft span { color: #ffd075; }
+    .dt-band-row.warning { border-color: rgba(244,193,93,.42); }
+    .dt-band-row.warning span { color: #f5cd6b; }
+    .dt-band-row.warning-soft, .dt-band-row.bearish { border-color: rgba(62,223,154,.44); background: linear-gradient(90deg, rgba(13,86,64,.32), rgba(8,18,25,.58)); }
+    .dt-band-row.warning-soft span, .dt-band-row.bearish span { color: #3edf9a; }
     .dt-dial-note p { margin: 0; color: #d3d8da; font-size: 19px; line-height: 1.55; }
     .dt-factor-panel { left: 16px; right: 16px; top: 672px; height: 496px; padding: 22px 26px; }
     .dt-factor-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 30px; margin-top: 16px; }
@@ -2523,12 +2766,12 @@ function darkTerminalCss() {
     .factor-row.bullish .bar i { background: linear-gradient(90deg, #ff5763, #d73a3a); }
     .factor-row.warning .bar i { background: linear-gradient(90deg, #ffd075, #d49b45); }
     .factor-row.bearish .bar i { background: linear-gradient(90deg, #3edf9a, #0e7e58); }
-    .dt-signal-panel { left: 16px; right: 16px; top: 1170px; height: 212px; padding: 20px 14px; overflow: hidden; }
+    .dt-signal-panel { left: 16px; right: 16px; top: 1170px; height: 180px; padding: 16px 14px; overflow: hidden; }
     .dt-signal-panel h2 { display: flex; align-items: center; gap: 9px; font-size: 28px; }
     .dt-signal-panel h2 svg { width: 32px; height: 32px; color: #4bbaff; }
     .dt-signal-panel h2 em { color: #dfe5e0; font-style: normal; font-size: 22px; font-weight: 500; }
-    .dt-signal-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px; }
-    .dt-signal-card { height: 142px; border: 1px solid rgba(132,160,178,.48); border-radius: 6px; background: rgba(8,18,25,.58); padding: 12px 16px; overflow: hidden; }
+    .dt-signal-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 10px; }
+    .dt-signal-card { height: 98px; border: 1px solid rgba(132,160,178,.48); border-radius: 6px; background: rgba(8,18,25,.58); padding: 10px 16px; overflow: hidden; }
     .dt-signal-card h3 { display: none; }
     .dt-signal-card ul { display: flex; flex-direction: column; flex-wrap: wrap; justify-content: center; gap: 3px 0; margin: 0; padding: 0; list-style: none; height: 100%; overflow: hidden; }
     .dt-signal-card li { position: relative; margin: 0; padding-left: 16px; color: #dfe5e0; font-size: 16px; line-height: 1.3; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2538,15 +2781,15 @@ function darkTerminalCss() {
 
     .dt-limit-panel { left: 16px; right: 16px; top: 165px; height: 380px; padding: 16px 22px; border: 1px solid #6c5326; overflow: hidden; }
     .dt-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 10px; }
-    .dt-metric { height: 240px; border: 1px solid rgba(255,75,69,.56); border-radius: 6px; text-align: center; padding: 14px 12px 12px; background: linear-gradient(180deg, rgba(116,30,27,.78), rgba(62,18,17,.72)); overflow: hidden; }
+    .dt-metric { height: 240px; border: 1px solid rgba(255,75,69,.56); border-radius: 6px; text-align: center; padding: 18px 12px 14px; background: linear-gradient(180deg, rgba(116,30,27,.78), rgba(62,18,17,.72)); overflow: hidden; display: flex; flex-direction: column; align-items: center; }
     .dt-metric.bearish { border-color: rgba(54,215,141,.56); background: linear-gradient(180deg, rgba(13,86,64,.86), rgba(10,50,43,.78)); }
     .dt-metric.gold { border-color: rgba(244,193,93,.56); background: linear-gradient(180deg, rgba(82,57,18,.86), rgba(50,38,12,.78)); }
     .dt-metric span { display: block; color: #efe5d7; font-size: 22px; }
     .dt-metric strong { display: block; margin-top: 10px; color: #ff5763; font-size: 54px; line-height: 1; font-weight: 900; text-shadow: 0 2px 0 rgba(0,0,0,.38); }
     .dt-metric.bearish strong { color: #3edf9a; }
     .dt-metric.gold strong { color: #ffd075; }
-    .dt-metric em { display: block; margin-top: 6px; color: #e1d8c8; font-size: 16px; font-style: normal; }
-    .dt-metric .metric-compare, .dt-ladder-card .metric-compare { margin-top: 6px; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; max-width: 100%; color: #dfe5e0; background: transparent; font-size: 15px; font-weight: 600; line-height: 1.25; }
+    .dt-metric em { display: block; margin-top: auto; color: #e1d8c8; font-size: 16px; line-height: 1.1; font-style: normal; min-height: 18px; }
+    .dt-metric .metric-compare, .dt-ladder-card .metric-compare { margin-top: 7px; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; max-width: 100%; color: #dfe5e0; background: transparent; font-size: 16px; font-weight: 700; line-height: 1.18; }
     .dt-metric .metric-compare.bullish, .dt-ladder-card .metric-compare.bullish { color: #ff8a8e; background: transparent; }
     .dt-metric .metric-compare.bearish, .dt-ladder-card .metric-compare.bearish { color: #6ee0a8; background: transparent; }
     .dt-metric .metric-compare.warning, .dt-ladder-card .metric-compare.warning { color: #f5cd6b; background: transparent; }
@@ -2559,8 +2802,8 @@ function darkTerminalCss() {
     /* 题材领涨/领跌：固定 5 行布局（1 行 header + 5 行数据），行号对齐 */
     .dt-theme-col .theme-bars { display: grid; grid-template-rows: auto repeat(5, 1fr); gap: 6px; flex: 1; min-height: 0; }
     .dt-theme-col .theme-bar-row { display: grid; align-items: center; gap: 8px; font-size: 17px; color: #e9e2cf; min-height: 0; line-height: 1.15; }
-    .dt-theme-col .theme-bars.gainers .theme-bar-row { grid-template-columns: 100px 1fr 56px; }
-    .dt-theme-col .theme-bars.losers .theme-bar-row { grid-template-columns: 100px 1fr; }
+    .dt-theme-col .theme-bars.gainers .theme-bar-row { grid-template-columns: 168px 1fr 74px; }
+    .dt-theme-col .theme-bars.losers .theme-bar-row { grid-template-columns: 136px 1fr; }
     .dt-theme-col .theme-bar-header { font-size: 15px; color: #c9b88c; font-weight: 700; border-bottom: 1px solid rgba(108,83,38,.5); padding: 0 0 5px; min-height: 22px; }
     .dt-theme-col .theme-bar-header em, .dt-theme-col .theme-bar-header span { font-weight: 700; }
     .dt-theme-col .theme-bar-row span { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2579,7 +2822,7 @@ function darkTerminalCss() {
     .dt-theme-col .theme-bar-placeholder .bar-track b { background: rgba(108,83,38,.34) !important; box-shadow: none; }
     .dt-theme-col .theme-bar-placeholder .bar-track u { color: rgba(233,226,207,.30); }
     .dt-theme-col .theme-empty { color: #8a8475; font-size: 14px; padding: 12px 0; text-align: center; font-style: italic; }
-    .dt-deep-panel { left: 16px; right: 16px; top: 937px; height: 432px; padding: 0; border: 1px solid #6c5326; overflow: hidden; }
+    .dt-deep-panel { left: 16px; right: 16px; top: 929px; height: 444px; padding: 0; border: 1px solid #6c5326; overflow: hidden; }
     .dt-deep-panel .theme-deep-dive { position: absolute; inset: 18px 22px; }
     .dt-deep-panel .theme-deep-dive .deep-dive-header h2 { color: #f5cd6b; font-size: 26px; margin: 0; }
     .dt-deep-panel .theme-deep-dive .deep-dive-header span { color: #9da3a3; font-size: 15px; }
@@ -2591,6 +2834,7 @@ function darkTerminalCss() {
     .dt-deep-panel .deep-dive-card h2 { color: #f5cd6b; font-size: 20px; margin: 0 0 8px; }
     .dt-deep-panel .deep-dive-items { display: grid; gap: 8px; min-height: 0; flex: 1; align-content: start; }
     .dt-deep-panel .deep-dive-item { padding: 12px 14px; border: 1px solid rgba(132,160,178,.24); background: rgba(0,0,0,.20); border-radius: 5px; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
+    .dt-deep-panel .theme-deep-dive.single .deep-dive-item { height: 100%; }
     .dt-deep-panel .deep-dive-title { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
     .dt-deep-panel .deep-dive-title h3 { color: #f0e1c1; font-size: 20px; font-weight: 800; margin: 0; }
     .dt-deep-panel .deep-dive-card.bullish .deep-dive-title h3 { color: #ff8b76; }
@@ -2605,6 +2849,7 @@ function darkTerminalCss() {
     .dt-deep-panel .deep-dive-signal.bullish { border-left: 2px solid #ff5763; }
     .dt-deep-panel .deep-dive-signal.bearish { border-left: 2px solid #3edf9a; }
     .dt-deep-panel .deep-dive-compact-signals { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; color: #d3d8da; font-size: 14px; }
+    .dt-deep-panel .deep-dive-signals, .dt-deep-panel .deep-dive-compact-signals { flex-shrink: 0; }
     .dt-deep-panel .deep-dive-compact-signals b { color: #f0d49c; }
     .dt-deep-panel .deep-dive-item.compact .deep-dive-judgment { -webkit-line-clamp: 1; line-clamp: 1; }
     .dt-deep-panel .deep-dive-item.compact .deep-dive-narrative { -webkit-line-clamp: 1; line-clamp: 1; }
@@ -2628,26 +2873,27 @@ function darkTerminalCss() {
     .dt-ladder-row span { color: #e9e2cf; font-size: 19px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .dt-ladder-row span em { color: #c9b88c; font-style: normal; margin-left: 8px; font-size: 16px; }
     .dt-roles-panel { left: 16px; right: 16px; top: 720px; height: 360px; padding: 18px 22px; border: 1px solid #6c5326; }
-    .dt-roles-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; height: calc(100% - 50px); align-items: stretch; }
-    .role-card { padding: 14px 14px; border: 1px solid rgba(202,144,69,.45); border-radius: 8px; background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01)); display: flex; flex-direction: column; justify-content: center; }
-    .role-card h2 { margin: 0 0 10px; color: #f5cd6b; font-size: 20px; font-weight: 800; }
+    .dt-roles-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; height: calc(100% - 50px); align-items: stretch; }
+    .role-card { padding: 18px 18px; border: 1px solid rgba(202,144,69,.45); border-radius: 8px; background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01)); display: flex; flex-direction: column; justify-content: center; }
+    .role-card h2 { margin: 0 0 10px; color: #f5cd6b; font-size: 23px; font-weight: 800; }
     .role-card.bullish { border-color: rgba(255,80,68,.40); }
     .role-card.warning { border-color: rgba(244,193,93,.40); }
     .role-card.bearish { border-color: rgba(54,215,141,.40); }
-    .leader-row { display: flex; align-items: center; gap: 6px; margin: 6px 0; font-size: 17px; color: #e9e2cf; }
+    .leader-row { display: flex; align-items: center; gap: 7px; margin: 7px 0; font-size: 18px; color: #e9e2cf; }
     .leader-row b { color: #f0e1c1; font-weight: 700; }
-    .leader-row em { color: #d6c7a4; font-style: normal; font-size: 15px; }
-    .dt-watch-panel { left: 16px; right: 16px; top: 1164px; height: 198px; padding: 18px 14px; border: 1px solid #6c5326; overflow: hidden; }
+    .leader-row em { color: #d6c7a4; font-style: normal; font-size: 17px; font-weight: 800; }
+    .dt-watch-panel { left: 16px; right: 16px; top: 1154px; height: 208px; padding: 16px 14px; border: 1px solid #6c5326; overflow: hidden; }
     .dt-watch-panel h2 { display: flex; align-items: center; gap: 9px; color: #dfe5e0; font-size: 28px; }
     .dt-watch-panel h2 svg { width: 30px; height: 30px; color: #4bbaff; }
     .dt-watch-panel h2 span { color: #dfe5e0; }
     .dt-watch-panel h2 em { color: #d3d8da; font-style: normal; font-size: 20px; font-weight: 500; }
-    .dt-watch-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; height: calc(100% - 50px); }
-    .dt-watch-panel .dt-signal-card { height: 100%; padding: 14px 18px; display: flex; flex-direction: column; }
-    .dt-watch-panel .dt-signal-card h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; color: #dfe5e0; font-size: 24px; font-weight: 900; }
-    .dt-watch-panel .dt-signal-card h3 svg { width: 28px; height: 28px; flex: 0 0 28px; }
-    .dt-watch-panel .dt-signal-card ul { margin: 0; padding-left: 16px; flex: 1; }
-    .dt-watch-panel .dt-signal-card li { font-size: 15px; line-height: 1.5; white-space: normal; overflow: visible; text-overflow: clip; margin-bottom: 4px; }
+    .dt-watch-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; height: calc(100% - 48px); }
+    .dt-watch-panel .dt-signal-card { height: 100%; padding: 12px 14px; display: flex; flex-direction: column; }
+    .dt-watch-panel .dt-signal-card h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 7px; color: #dfe5e0; font-size: 22px; font-weight: 900; }
+    .dt-watch-panel .dt-signal-card h3 svg { width: 24px; height: 24px; flex: 0 0 24px; }
+    .dt-watch-panel .dt-signal-card ul { margin: 0; padding: 0; list-style: none; flex: 1; overflow: hidden; }
+    .dt-watch-panel .dt-signal-card li { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; position: relative; padding-left: 15px; font-size: 14px; line-height: 1.42; white-space: normal; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+    .dt-watch-panel .dt-signal-card li::before { left: 0; top: 6px; width: 7px; height: 7px; }
     .dt-watch-panel .dt-signal-card.confirm h3, .dt-watch-panel .dt-signal-card.confirm li::before { color: #5cd38b; }
     .dt-watch-panel .dt-signal-card.weaken h3, .dt-watch-panel .dt-signal-card.weaken li::before { color: #ffb742; }
     .dt-watch-panel .dt-signal-card.risk h3, .dt-watch-panel .dt-signal-card.risk li::before { color: #ff5b4e; }
@@ -2803,21 +3049,46 @@ export async function runBrowserPreflight(page) {
         errors.push(`page ${pageNo}: poster size ${Math.round(rect.width)}x${Math.round(rect.height)} is not 1080x1440`);
       }
       const safe = { left: rect.left + 32, right: rect.right - 32, top: rect.top + 32, bottom: rect.bottom - 32 };
-      const nodes = Array.from(poster.querySelectorAll('.panel, .li-panel, .de-panel, .dt-panel, .metric-card, .quality-card, .signal-card, .li-signal-card, .de-signal-card, .dt-signal-card, .li-index-card, .de-index-card, .dt-index-card, .role-card, .leader-row, .li-ladder-row, .de-ladder-row, .dt-ladder-row, .theme-row, .li-theme-row, .dt-theme-row, .deep-dive-card, .footer, .li-footer, .de-footer, .dt-footer'));
+      const nodes = Array.from(poster.querySelectorAll('[data-fit], .panel, .li-panel, .de-panel, .dt-panel, .de-judgement-body, .metric-card, .quality-card, .signal-card, .li-signal-card, .de-signal-card, .dt-signal-card, .de-watch-card, .li-index-card, .de-index-card, .dt-index-card, .role-card, .leader-row, .li-ladder-rows, .de-ladder-rows, .dt-ladder-rows, .li-ladder-row, .de-ladder-row, .dt-ladder-row, .theme-row, .li-theme-row, .dt-theme-row, .theme-bar-row, .deep-dive-card, .deep-dive-item, .footer, .li-footer, .de-footer, .dt-footer'));
+      const visibleNodes = [];
+      const isFooterNode = (el) => el.tagName === 'FOOTER' || Array.from(el.classList).some((name) => name.includes('footer'));
       for (const el of nodes) {
         const cs = window.getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        if (cs.display === 'none' || cs.visibility === 'hidden' || r.width === 0 || r.height === 0) continue;
+        visibleNodes.push({ el, rect: r });
         const overflowHidden = cs.overflow === 'hidden' || cs.overflowY === 'hidden' || cs.overflowX === 'hidden';
-        const overflowX = el.scrollWidth > el.clientWidth + 8;
-        const overflowY = el.scrollHeight > el.clientHeight + 8;
-        if ((overflowX || overflowY) && !overflowHidden) {
+        const boxWidth = el.clientWidth || r.width;
+        const boxHeight = el.clientHeight || r.height;
+        const overflowX = el.scrollWidth > boxWidth + 8;
+        const overflowY = el.scrollHeight > boxHeight + 8;
+        const criticalOverflow = el.matches('[data-fit], .de-judgement-body, .li-ladder-rows, .de-ladder-rows, .dt-ladder-rows, .deep-dive-card, .deep-dive-item, .theme-bar-row, .de-watch-card');
+        if ((overflowX || overflowY) && (!overflowHidden || criticalOverflow)) {
           const snippet = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 48);
           errors.push(`page ${pageNo}: overflow ${overflowX ? 'x' : ''}${overflowY ? 'y' : ''} at ${el.className || el.tagName}: ${snippet}`);
         }
-        const r = el.getBoundingClientRect();
-        const isFooter = el.tagName === 'FOOTER' || Array.from(el.classList).some((name) => name.includes('footer'));
+        const isFooter = isFooterNode(el);
         if (!isFooter && (r.left < safe.left - 1 || r.right > safe.right + 1 || r.top < safe.top - 1 || r.bottom > safe.bottom + 1)) {
           const snippet = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 48);
           errors.push(`page ${pageNo}: safe-area violation at ${el.className || el.tagName}: ${snippet}`);
+        }
+      }
+      const footers = visibleNodes.filter(({ el }) => isFooterNode(el));
+      const footerOverlapCandidates = visibleNodes.filter(({ el }) =>
+        !isFooterNode(el) &&
+        el.matches('.panel, .li-panel, .de-panel, .dt-panel, .metric-card, .quality-card, .signal-card, .li-signal-card, .de-signal-card, .dt-signal-card, .de-watch-card, .role-card, .deep-dive-card, .deep-dive-item')
+      );
+      for (const { el, rect: r } of footerOverlapCandidates) {
+        for (const { rect: footerRect } of footers) {
+          const overlapsFooter =
+            r.left < footerRect.right - 1 &&
+            r.right > footerRect.left + 1 &&
+            r.top < footerRect.bottom - 1 &&
+            r.bottom > footerRect.top + 1;
+          if (overlapsFooter) {
+            const snippet = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 48);
+            errors.push(`page ${pageNo}: footer overlap at ${el.className || el.tagName}: ${snippet}`);
+          }
         }
       }
     }

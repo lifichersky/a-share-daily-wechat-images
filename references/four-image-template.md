@@ -63,13 +63,16 @@ Include:
   - Use A-share semantics by indicator: more涨停 and higher封板率 are red; more跌停 and more炸板 are green; unchanged is gold/neutral.
 - Main theme counts. Label `题材概念口径` or `行业口径`.
 - Use compact bar charts for theme/industry counts so readers can compare strength at a glance.
+  - In `领涨TOP`, the bar-end label must be the theme's positive percentage change from `pct`, e.g. `+4.6%`.
+  - The right column is the only place to show `涨停家数` from `up`; do not repeat `up` at the bar end.
+  - Any `concept_counts` item with `up > 0` needs a numeric `pct` before rendering, otherwise the report should fail validation and the data should be completed.
 - A bottom `题材深读` module driven by `theme_interpretation`:
-  - If both upside and downside themes qualify, render `主线炒作解读` and `领跌负反馈解读` side by side.
-  - If only upside themes qualify, render one wide `主线炒作解读` module.
-  - If only downside themes qualify, render one wide `领跌负反馈解读` module.
+  - Render only one wide theme memo on the image.
+  - If upside themes qualify, render the hottest and most aggressive speculative theme, normally `theme_interpretation.upside[0]`.
+  - If no upside theme qualifies but a downside theme dominates the tape, render one wide negative-feedback memo.
   - If no clear theme qualifies, render one wide `无明确主线状态` module.
 - `题材深读` uses the v2 investment-memo structure:
-  - Prefer 1 upside theme and 1 downside/negative-feedback theme. Add a second item only when there is a real dual-mainline or dual-risk structure.
+  - The image commentary must focus on one theme only. Keep additional upside/downside items in JSON only as supporting context when useful.
   - Each interpreted theme must include a stage tag such as `新主线`, `老主线反抽`, `高位容量抱团`, `低位补涨试错`, `防御承接`, `权重护盘`, or `退潮负反馈`.
   - `本质判断`: one sentence explaining what the theme really is today, such as new mainline, old-line rebound, capacity crowding, low-level catch-up, defensive rotation, or retreat feedback.
   - `来龙去脉`: one compact paragraph that connects why money selected it, how the intraday evidence confirmed or weakened it, and how it relates to index, turnover, previous emotion, and capital style.
@@ -94,7 +97,7 @@ Include:
   - `连板总数` must include previous trading day's consecutive-board total, e.g. `昨日 16只 · 较昨 -5只`.
   - Count `连板总数` from 2-board and above stocks only; first boards do not enter this total.
   - Use A-share semantics: expansion/opening space is red, contraction/compression is green, unchanged is gold/neutral.
-- Standard role blocks:
+- JSON keeps the eight standardized role groups:
   - `空间龙`: highest non-ST board or market-height anchor.
   - `板块龙头`: strongest stock inside a main theme.
   - `容量中军`: high-turnover large-cap/core stock that drives index or sector emotion.
@@ -103,12 +106,14 @@ Include:
   - `补涨前排`: lower-position stock following the main branch.
   - `首板前排`: high-recognition first board or strong-seal stock.
   - `风险负反馈`: down-limit, failed high-board, large-loss, or broken-board representative.
+- The image role map displays six market-defining cards: `空间龙`, `板块龙头`, `容量中军`, `核心助攻`, `中位接力`, and `风险负反馈`.
+- `补涨前排` and `首板前排` remain in JSON and may appear in ladder rows or source notes, but they should not occupy separate visual role cards.
 - Ladder:
   - `N板 · 空间龙`,
   - `3-4板 · 中位接力`,
   - `2板 · 补涨前排`,
   - `首板 · 板块前排`.
-- Use a compact ladder strip plus the eight standardized role blocks; do not collapse multiple roles into one generic card.
+- Use a compact ladder strip plus the six displayed role blocks; do not collapse multiple roles into one generic card.
 - Compact sector/leader mapping through the metric header, standardized role blocks, and ladder strip, e.g. `电力: 华电能源`, `通信/CPO: 中兴通讯/工业富联`.
 - Watch panel:
   - `确认信号`,

@@ -35,7 +35,7 @@ Theme changes the visual skin only; it must not change data fields, report order
 Before starting any task, the agent must determine which visual theme to render. This step is mandatory and must happen before any research, data collection, or HTML generation begins.
 
 - **If the user's instruction explicitly names a theme** (e.g. "用暗金主题生成", "render in 浅色机构午报风格", "use the Bloomberg-terminal theme"), use that theme directly and proceed to step 1.
-- **If the user's instruction does not name a theme** (e.g. "生成今天的 A 股日报", "跑一下 2026-05-29 报告"), the agent **must not pick a default theme on its own**. Instead, use the `AskUserQuestion` tool to ask the user which of the three themes they want, and wait for the answer before proceeding. The question should list all three themes with a short description of each. Do not start research, data collection, JSON building, or rendering until the user has answered.
+- **If the user's instruction does not name a theme** (e.g. "生成今天的 A 股日报", "跑一下 2026-05-29 报告"), the agent **must not pick a default theme on its own**. Instead, ask the user which of the three themes they want, and wait for the answer before proceeding. The question should list all three themes with a short description of each. Do not start research, data collection, JSON building, or rendering until the user has answered.
 - Do not infer a theme from prior sessions, from "usually we use X", or from the order of themes listed in this file. The user's instruction is the only valid source.
 - The chosen theme must be recorded into `daily-data.json.theme` and used for all four images.
 
@@ -46,7 +46,7 @@ Use these skills when available:
 - `financial-analysis`: for first-pass financial market insight, anomaly discovery, and cross-checking.
 - `web-access`: for all live web search, source discovery, and verification.
 
-Do not require `imagegen` for the default workflow. The report must be renderable with deterministic HTML/CSS and browser screenshots. Use generated images only when the user explicitly asks for an experimental background; never use image generation for exact Chinese text, stock names, numbers, labels, or chart content.
+Do not require `imagegen` for the standard report workflow. The report must be renderable with deterministic HTML/CSS and browser screenshots. Use generated images only when the user explicitly asks for an experimental background; never use image generation for exact Chinese text, stock names, numbers, labels, or chart content.
 
 If the user asks for "今天", "昨日", "周五", or any relative date, resolve and state the exact report date before final delivery. If the date is a weekend or market holiday and the user did not specify a trading day, use the latest completed A-share trading day and state that choice.
 
@@ -77,14 +77,14 @@ YYYY-MM-DD-数据来源与口径.md
 
 ## Workflow
 
-0. **Confirm the visual theme** (mandatory, before any work). If the user's instruction does not name one of the three themes (`暗金杂志封面风格`, `浅色机构午报风格`, `深色终端杂志风格`), use `AskUserQuestion` to ask the user which theme to use and wait for an answer. Do not start research or rendering until a theme is locked. The chosen theme is used for all four images and is recorded into `daily-data.json.theme`.
+0. **Confirm the visual theme** (mandatory, before any work). If the user's instruction does not name one of the three themes (`暗金杂志封面风格`, `浅色机构午报风格`, `深色终端杂志风格`), ask the user which theme to use and wait for an answer. Do not start research or rendering until a theme is locked. The chosen theme is used for all four images and is recorded into `daily-data.json.theme`.
 1. Determine the report date and create the output folder.
 2. Research and verify the date's A-share data. Read [references/data-sources.md](references/data-sources.md). Use the fixed source mix: `financial-analysis`, 东方财富, 财联社, and 证券时报·数据宝. Add extra sources only when a fixed public source is unavailable or key numbers conflict, and record the reason in口径 notes.
 3. Build and save `YYYY-MM-DD-daily-data.json` before making images. Follow [references/report-schema.md](references/report-schema.md), include `schema_version`, `emotion_model_version`, `data_quality`, and `wechat_commentary_v1`, then validate it against [references/daily-data.schema.json](references/daily-data.schema.json). Every image and the commentary text must read from this JSON, not from ad hoc notes.
 4. Compute `emotion_model_v1` with the threshold rules in [references/emotion-model-v1.md](references/emotion-model-v1.md) and save all 10 factor scores in JSON. Image 2 should show the headline score/state, the score-band usage note, and all 10 factor bars; the JSON must keep the component scores, factor max values, reasons, and confidence.
 5. Assign standardized leader roles in JSON: `空间龙`, `板块龙头`, `容量中军`, `核心助攻`, `中位接力`, `补涨前排`, `首板前排`, `风险负反馈`.
 6. Fill previous-day comparison fields for images 3 and 4. Prefer the previous completed trading day's saved `daily-data.json` at `{current_output_dir_parent}/{previous_trading_date}/{previous_trading_date}-daily-data.json`; otherwise verify from fixed public sources. Fill `limit_up.previous_day` for `涨停 / 跌停 / 炸板 / 封板率` and `ladder.previous_day` for `非ST空间高度 / 连板总数`. `consecutive_board_total` counts only 2-board and above stocks.
-7. Fill `theme_interpretation` for image 3 with the `题材深读 v2` investment-memo structure. Replace the old `高度 / 广度 / 风险` bottom blocks and the old four-line fill-in style. Prioritize one mainstream upside theme and one major downside/negative-feedback theme; use a second item on either side only when there is a real dual-mainline or dual-risk structure. Each item must include `stage`, `core_judgment`, `narrative`, `confirm_signal`, `invalidate_signal`, and `source_keys`. The writing must explain the theme's essence and cause-effect path, not merely repeat counts; do not invent unsourced policy/news catalysts.
+7. Fill `theme_interpretation` for image 3 with the `题材深读 v2` investment-memo structure. Replace the old `高度 / 广度 / 风险` bottom blocks and the old four-line fill-in style. The rendered image should analyze only one hottest and most aggressive speculative theme for the day, normally `theme_interpretation.upside[0]`; keep downside/negative-feedback items in JSON only as supporting structured context. Each item must include `stage`, `core_judgment`, `narrative`, `confirm_signal`, `invalidate_signal`, and `source_keys`. The writing must explain the theme's essence and cause-effect path, not merely repeat counts; do not invent unsourced policy/news catalysts.
 8. Convert next-session observations into `确认信号`, `弱化信号`, and `风险信号`; avoid vague "关注某方向" wording without explicit conditions.
 9. Lock the visual theme for this run. Read [references/theme-and-layout.md](references/theme-and-layout.md). The theme must already be locked by step 0 — do not pick or change it here. If the theme is still unset at this point, stop and ask the user. Use `暗金杂志封面风格` for the dark-gold + magazine-cover feel, `浅色机构午报风格` for a paper-like research-report feel, or `深色终端杂志风格` for a Bloomberg-terminal look. Do not fall back to a fourth style.
 10. Generate a self-contained `YYYY-MM-DD-report.html` from `daily-data.json`. Follow [references/rendering-workflow.md](references/rendering-workflow.md). Prefer `scripts/render-report.mjs` for this step. The HTML must contain four 1080x1440 `.poster` sections and use local CSS for all text, numbers, charts, and theme styling.
@@ -126,7 +126,7 @@ If sources disagree, choose the clearest mainstream source for the displayed num
 - Use the selected theme from [references/theme-and-layout.md](references/theme-and-layout.md).
 - Keep layout coordinates, panel order, text hierarchy, and data fields stable across themes.
 - For `暗金杂志封面风格`, use the approved `深色金融 + 杂志标题 + 机构卡片` direction: image 1 is a magazine-cover page, images 2-3 are balanced terminal-analysis pages, and image 4 is a high-density leader page. Image 1 uses a spotlight cover background and the Chinese title treatment `A股市场` plus a red `情绪日报` tag. Images 2-4 use the dark-gold satin analysis background.
-- Avoid one-hue palettes. Do not use grid/repeated-line backgrounds in the default themes.
+- Avoid one-hue palettes. Do not use grid/repeated-line backgrounds in the built-in themes.
 - Use small rounded corners for content blocks: 6px for panels/cards and 4px for tags/chips.
 - Use fixed color semantics: red for bullish/up/repair/strong, green for bearish/down/risk/negative feedback, blue for model/structure, and gold for分歧/observation/hierarchy.
 - Keep all text readable on mobile: large headers, short lines, no dense paragraphs in small cards.
@@ -150,7 +150,7 @@ Before telling the user the report is complete, verify:
 - Image 2 explains the emotional cycle and next-session watch points.
 - Image 3 explains the limit-up structure, includes previous-day comparison for `涨停 / 跌停 / 炸板 / 封板率`, and renders `题材深读 v2`: theme essence, cause-effect narrative, confirmation signal, and invalidation signal for mainstream upside / downside themes or the no-clear-mainline state.
 - Image 4 names concrete leaders, board counts, ladder roles, and previous-day comparison for `非ST空间高度` and `连板总数`.
-- Image 4 includes standardized roles, including `容量中军` when a large-cap/high-turnover stock drives the theme.
+- Image 4 keeps all 8 standardized role keys in JSON, but the visual role map displays only the 6 market-defining roles: `空间龙`, `板块龙头`, `容量中军`, `核心助攻`, `中位接力`, and `风险负反馈`.
 - Next-session observations include `确认信号`, `弱化信号`, and `风险信号`.
 - `wechat_commentary_v1.text` reads as a short commentary, not a data recap: it includes an explicit judgment, a capital-logic chain, and a next-session validation condition.
 - All important numbers are sourced and口径-labeled.
