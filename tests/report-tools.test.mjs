@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import { THEMES, resolveTheme } from '../scripts/themes.mjs';
-import { renderReport, renderReportHtml, runBrowserPreflight } from '../scripts/render-report.mjs';
+import { launchChromium, renderReport, renderReportHtml, runBrowserPreflight } from '../scripts/render-report.mjs';
 import { validateSourceNotesText } from '../scripts/validate-report.mjs';
 import * as reportUtils from '../scripts/lib/report-utils.mjs';
 
@@ -18,6 +18,45 @@ const samplePath = path.join(skillRoot, 'fixtures', 'sample-daily-data.json');
 
 async function loadSample() {
   return JSON.parse(await readFile(samplePath, 'utf8'));
+}
+
+function applyRoleStressData(data) {
+  data.report_date = '2026-06-22';
+  data.weekday = '周一';
+  data.leader_roles = {
+    空间龙: [
+      { name: '旭光电子', theme: '光通信/氯化铝', board: 5, reason: '压力测试' },
+      { name: '香江控股', theme: '地产/统一大市场', board: 5, reason: '压力测试' }
+    ],
+    板块龙头: [
+      { name: '江钨装备', theme: '有色钨/稀有金属', board: 4, reason: '压力测试' },
+      { name: '艾华集团', theme: '被动元件/铝电容', board: 4, reason: '压力测试' }
+    ],
+    容量中军: [
+      { name: '东方财富', theme: '券商/互联网金融', board: 1, reason: '压力测试' },
+      { name: '阳光电源', theme: '光伏逆变器/储能', board: 1, reason: '压力测试' }
+    ],
+    核心助攻: [
+      { name: '中兴通讯', theme: '通信设备/算力基建', board: 1, reason: '压力测试' },
+      { name: '江海股份', theme: '电力设备/超级电容', board: 1, reason: '压力测试' }
+    ],
+    中位接力: [
+      { name: '冰轮环境', theme: '液冷服务器/冷链设备', board: 3, reason: '压力测试' },
+      { name: '合锻智能', theme: '光模块/CPO/专用设备', board: 4, reason: '压力测试' }
+    ],
+    补涨前排: [],
+    首板前排: [],
+    风险负反馈: [
+      { name: '天孚通信', theme: '光模块/CPO/高速连接器', board: null, reason: '压力测试' },
+      { name: '东山精密', theme: 'PCB/电子电路/消费电子', board: null, reason: '压力测试' }
+    ]
+  };
+  data.next_session_signals = {
+    确认信号: ['华电能源或者香江控股继续晋级并带动板块扩散'],
+    弱化信号: ['中位接力票继续放量分歧且补涨断层'],
+    风险信号: ['科技容量核心继续走弱并压制指数风险偏好']
+  };
+  return data;
 }
 
 test('themes expose stable tokenized dark and light variants', () => {
@@ -332,17 +371,22 @@ test('dark editorial page 4 gives next-session ladder judgment enough room and f
   assert.match(html, /\.de-watch-card p \{[^}]*font-size: 16px;[^}]*line-height: 1\.38;[^}]*overflow-wrap: anywhere;[^}]*word-break: break-word;/);
   assert.match(runBrowserPreflight.toString(), /\.de-watch-card/);
   assert.match(runBrowserPreflight.toString(), /criticalOverflow[\s\S]*\.de-watch-card/);
+  assert.match(runBrowserPreflight.toString(), /criticalOverflow[\s\S]*\.role-card/);
+  assert.match(runBrowserPreflight.toString(), /parent-panel clipping/);
   assert.match(runBrowserPreflight.toString(), /footer overlap/);
   assert.match(runBrowserPreflight.toString(), /footerOverlapCandidates/);
+  assert.match(runBrowserPreflight.toString(), /panel overlap/);
 });
 
-test('dark editorial role rows keep stock names on one line and align descriptions', async () => {
+test('dark editorial role rows keep names fixed and wrap descriptions without clipping', async () => {
   const data = await loadSample();
   const html = renderReportHtml(data);
+  assert.match(html, /\.de-roles-grid \{[^}]*grid-template-rows: repeat\(2, minmax\(0, 1fr\)\);[^}]*min-height: 0;/);
+  assert.match(html, /\.role-card \{[^}]*min-height: 0;[^}]*overflow: hidden;/);
   assert.match(html, /\.leader-row \{ display: grid; grid-template-columns: 5\.2em minmax\(0, 1fr\);/);
   assert.match(html, /\.leader-row b \{[^}]*white-space: nowrap;[^}]*overflow: visible;/);
-  assert.match(html, /\.leader-row span \{ min-width: 0; \}/);
-  assert.match(html, /\.leader-row em \{[^}]*font-size: 17px;[^}]*font-weight: 800;/);
+  assert.match(html, /\.leader-row span \{[^}]*white-space: normal;[^}]*overflow-wrap: anywhere;[^}]*word-break: break-word;/);
+  assert.match(html, /\.leader-row em \{[^}]*font-size: 16px;[^}]*font-weight: 800;/);
   assert.match(html, /<em>5板<\/em> 地产/);
   assert.match(html, /<em>容量<\/em> 通信/);
 });
@@ -745,9 +789,54 @@ test('light page 4 reserves vertical gaps between lower panels and footer', asyn
   assert.match(html, /<span class="li-section-icon roles">/);
   assert.match(html, /<span class="li-section-icon watch">/);
   assert.match(html, /\.li-watch-grid p \{[^}]*font-size: 14px;[^}]*-webkit-line-clamp: 4;/);
+  assert.match(html, /\.li-roles-grid \{[^}]*grid-template-rows: repeat\(2, minmax\(0, 1fr\)\);[^}]*min-height: 0;/);
   assert.match(html, /\.leader-row \{ display: grid; grid-template-columns: 5\.2em minmax\(0, 1fr\);/);
   assert.match(html, /\.leader-row b \{[^}]*white-space: nowrap;[^}]*overflow: visible;/);
-  assert.match(html, /\.leader-row span \{[^}]*white-space: nowrap;[^}]*text-overflow: ellipsis;/);
+  assert.match(html, /\.leader-row span \{[^}]*white-space: normal;[^}]*overflow-wrap: anywhere;[^}]*word-break: break-word;/);
+});
+
+test('browser preflight keeps page 4 role mapping unclipped across all themes', async (t) => {
+  const browser = await launchChromium();
+  t.after(async () => {
+    await browser.close();
+  });
+
+  for (const theme of ['暗金杂志封面风格', '浅色机构午报风格', '深色终端杂志风格']) {
+    const data = applyRoleStressData(await loadSample());
+    data.theme = theme;
+    const page = await browser.newPage({ viewport: { width: 1200, height: 1600 }, deviceScaleFactor: 1 });
+    try {
+      await page.setContent(renderReportHtml(data, { theme }), { waitUntil: 'load' });
+      await page.evaluate(() => document.fonts?.ready);
+      const errors = await runBrowserPreflight(page);
+      assert.deepEqual(errors, [], `${theme}\n${errors.join('\n')}`);
+
+      const roleLayout = await page.evaluate(() => {
+        const panel = document.querySelector('[data-page="4"] .de-roles-panel, [data-page="4"] .li-roles-panel, [data-page="4"] .dt-roles-panel');
+        const panelRect = panel.getBoundingClientRect();
+        const clippedCards = Array.from(document.querySelectorAll('[data-page="4"] .role-card'))
+          .filter((el) => {
+            const rect = el.getBoundingClientRect();
+            return rect.top < panelRect.top - 2 || rect.bottom > panelRect.bottom + 2;
+          })
+          .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 32));
+        const nonWrappingRows = Array.from(document.querySelectorAll('[data-page="4"] .leader-row span'))
+          .filter((el) => window.getComputedStyle(el).whiteSpace === 'nowrap')
+          .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim());
+        return {
+          panelOverflow: panel.scrollHeight - panel.clientHeight,
+          clippedCards,
+          nonWrappingRows
+        };
+      });
+
+      assert.ok(roleLayout.panelOverflow <= 4, `${theme} role panel overflowed by ${roleLayout.panelOverflow}px`);
+      assert.deepEqual(roleLayout.clippedCards, [], `${theme} role cards escaped the role panel`);
+      assert.deepEqual(roleLayout.nonWrappingRows, [], `${theme} role descriptions should wrap instead of ellipsizing`);
+    } finally {
+      await page.close();
+    }
+  }
 });
 
 test('seal rate color follows A-share risk-control semantics', async () => {

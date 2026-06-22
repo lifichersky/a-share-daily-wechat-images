@@ -1378,16 +1378,16 @@ function darkEditorialCss() {
     .de-ladder-row span { color: #e9e2cf; font-size: 19px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .de-ladder-row span em { color: #c9b88c; font-style: normal; margin-left: 8px; font-size: 16px; }
     .de-roles-panel { left: 26px; right: 26px; top: 716px; height: 396px; padding: 18px 22px; }
-    .de-roles-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; height: calc(100% - 38px); align-items: stretch; }
-    .role-card { padding: 18px 18px; border: 1px solid rgba(202,144,69,.45); border-radius: 8px; background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01)); display: flex; flex-direction: column; justify-content: center; }
-    .role-card h2 { margin: 0 0 10px; color: #f0d49c; font-size: 24px; font-weight: 800; }
+    .de-roles-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px 14px; height: calc(100% - 38px); align-items: stretch; min-height: 0; }
+    .role-card { padding: 14px 16px; border: 1px solid rgba(202,144,69,.45); border-radius: 8px; background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01)); display: flex; flex-direction: column; justify-content: center; min-width: 0; min-height: 0; overflow: hidden; }
+    .role-card h2 { flex: 0 0 auto; margin: 0 0 8px; color: #f0d49c; font-size: 23px; line-height: 1.05; font-weight: 800; }
     .role-card.bullish { border-color: rgba(255,80,68,.40); }
     .role-card.warning { border-color: rgba(244,193,93,.40); }
     .role-card.bearish { border-color: rgba(26,180,123,.40); }
-    .leader-row { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); align-items: start; column-gap: 8px; margin: 7px 0; font-size: 18px; line-height: 1.35; color: #e9e2cf; }
+    .leader-row { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); align-items: start; column-gap: 7px; margin: 4px 0; font-size: 17px; line-height: 1.25; color: #e9e2cf; min-width: 0; }
     .leader-row b { color: #f0e1c1; font-weight: 700; white-space: nowrap; overflow: visible; }
-    .leader-row span { min-width: 0; }
-    .leader-row em { color: #d6c7a4; font-style: normal; font-size: 17px; font-weight: 800; }
+    .leader-row span { min-width: 0; white-space: normal; overflow: visible; overflow-wrap: anywhere; word-break: break-word; }
+    .leader-row em { color: #d6c7a4; font-style: normal; font-size: 16px; font-weight: 800; }
     .de-watch-panel { left: 26px; right: 26px; top: 1126px; height: 208px; padding: 14px 20px; overflow: hidden; }
     .de-watch-panel h2 { display: flex; align-items: center; gap: 8px; }
     .de-watch-panel h2 .de-title-icon { color: #f0d49c; font-size: 28px; }
@@ -2175,16 +2175,16 @@ function lightInstitutionalCss() {
     .li-ladder-row span { min-width: 0; color: #1d2227; font-size: 18px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .li-ladder-row span em { color: #5b6068; font-style: normal; margin-left: 7px; font-size: 16px; }
     .li-roles-panel { left: 34px; right: 34px; top: 768px; height: 364px; padding: 17px 22px; }
-    .li-roles-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; height: calc(100% - 48px); align-items: stretch; }
-    .role-card { padding: 13px 15px; border: 1px solid rgba(30,58,91,.28); border-radius: 8px; background: linear-gradient(180deg, rgba(255,255,255,.76), rgba(255,255,255,.46)); display: flex; flex-direction: column; justify-content: center; box-shadow: inset 0 1px 0 rgba(255,255,255,.70); min-width: 0; }
-    .role-card h2 { margin: 0 0 8px; color: #1a3050; font-size: 22px; font-weight: 900; letter-spacing: 0; }
+    .li-roles-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 10px 12px; height: calc(100% - 48px); align-items: stretch; min-height: 0; }
+    .role-card { padding: 10px 13px; border: 1px solid rgba(30,58,91,.28); border-radius: 8px; background: linear-gradient(180deg, rgba(255,255,255,.76), rgba(255,255,255,.46)); display: flex; flex-direction: column; justify-content: center; box-shadow: inset 0 1px 0 rgba(255,255,255,.70); min-width: 0; min-height: 0; overflow: hidden; }
+    .role-card h2 { flex: 0 0 auto; margin: 0 0 6px; color: #1a3050; font-size: 21px; line-height: 1.05; font-weight: 900; letter-spacing: 0; }
     .role-card.bullish { border-color: rgba(216,33,29,.40); }
     .role-card.warning { border-color: rgba(216,138,30,.40); }
     .role-card.bearish { border-color: rgba(10,140,104,.40); }
-    .leader-row { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); align-items: center; column-gap: 7px; margin: 5px 0; font-size: 17px; line-height: 1.25; color: #1d2227; min-width: 0; }
+    .leader-row { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); align-items: start; column-gap: 6px; margin: 3px 0; font-size: 16px; line-height: 1.2; color: #1d2227; min-width: 0; }
     .leader-row b { color: #1a3050; font-weight: 700; white-space: nowrap; overflow: visible; }
-    .leader-row span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .leader-row em { color: #5b6068; font-style: normal; font-size: 16px; font-weight: 800; }
+    .leader-row span { min-width: 0; white-space: normal; overflow: visible; overflow-wrap: anywhere; word-break: break-word; }
+    .leader-row em { color: #5b6068; font-style: normal; font-size: 15px; font-weight: 800; }
     .li-watch-panel { left: 34px; right: 34px; top: 1150px; height: 190px; padding: 17px 22px; }
     .li-watch-panel h2 { display: flex; align-items: center; gap: 8px; }
     .li-watch-panel h2::before { display: none; }
@@ -2873,15 +2873,16 @@ function darkTerminalCss() {
     .dt-ladder-row span { color: #e9e2cf; font-size: 19px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .dt-ladder-row span em { color: #c9b88c; font-style: normal; margin-left: 8px; font-size: 16px; }
     .dt-roles-panel { left: 16px; right: 16px; top: 720px; height: 360px; padding: 18px 22px; border: 1px solid #6c5326; }
-    .dt-roles-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; height: calc(100% - 50px); align-items: stretch; }
-    .role-card { padding: 18px 18px; border: 1px solid rgba(202,144,69,.45); border-radius: 8px; background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01)); display: flex; flex-direction: column; justify-content: center; }
-    .role-card h2 { margin: 0 0 10px; color: #f5cd6b; font-size: 23px; font-weight: 800; }
+    .dt-roles-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 10px 14px; height: calc(100% - 42px); align-items: stretch; min-height: 0; }
+    .role-card { padding: 10px 14px; border: 1px solid rgba(202,144,69,.45); border-radius: 8px; background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01)); display: flex; flex-direction: column; justify-content: center; min-width: 0; min-height: 0; overflow: hidden; }
+    .role-card h2 { flex: 0 0 auto; margin: 0 0 5px; color: #f5cd6b; font-size: 21px; line-height: 1.05; font-weight: 800; }
     .role-card.bullish { border-color: rgba(255,80,68,.40); }
     .role-card.warning { border-color: rgba(244,193,93,.40); }
     .role-card.bearish { border-color: rgba(54,215,141,.40); }
-    .leader-row { display: flex; align-items: center; gap: 7px; margin: 7px 0; font-size: 18px; color: #e9e2cf; }
-    .leader-row b { color: #f0e1c1; font-weight: 700; }
-    .leader-row em { color: #d6c7a4; font-style: normal; font-size: 17px; font-weight: 800; }
+    .leader-row { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); align-items: start; column-gap: 6px; margin: 3px 0; font-size: 16px; line-height: 1.18; color: #e9e2cf; min-width: 0; }
+    .leader-row b { color: #f0e1c1; font-weight: 700; white-space: nowrap; overflow: visible; }
+    .leader-row span { min-width: 0; white-space: normal; overflow: visible; overflow-wrap: anywhere; word-break: break-word; }
+    .leader-row em { color: #d6c7a4; font-style: normal; font-size: 15px; font-weight: 800; }
     .dt-watch-panel { left: 16px; right: 16px; top: 1154px; height: 208px; padding: 16px 14px; border: 1px solid #6c5326; overflow: hidden; }
     .dt-watch-panel h2 { display: flex; align-items: center; gap: 9px; color: #dfe5e0; font-size: 28px; }
     .dt-watch-panel h2 svg { width: 30px; height: 30px; color: #4bbaff; }
@@ -3049,7 +3050,7 @@ export async function runBrowserPreflight(page) {
         errors.push(`page ${pageNo}: poster size ${Math.round(rect.width)}x${Math.round(rect.height)} is not 1080x1440`);
       }
       const safe = { left: rect.left + 32, right: rect.right - 32, top: rect.top + 32, bottom: rect.bottom - 32 };
-      const nodes = Array.from(poster.querySelectorAll('[data-fit], .panel, .li-panel, .de-panel, .dt-panel, .de-judgement-body, .metric-card, .quality-card, .signal-card, .li-signal-card, .de-signal-card, .dt-signal-card, .de-watch-card, .li-index-card, .de-index-card, .dt-index-card, .role-card, .leader-row, .li-ladder-rows, .de-ladder-rows, .dt-ladder-rows, .li-ladder-row, .de-ladder-row, .dt-ladder-row, .theme-row, .li-theme-row, .dt-theme-row, .theme-bar-row, .deep-dive-card, .deep-dive-item, .footer, .li-footer, .de-footer, .dt-footer'));
+      const nodes = Array.from(poster.querySelectorAll('[data-fit], .panel, .li-panel, .de-panel, .dt-panel, .de-judgement-body, .metric-card, .quality-card, .signal-card, .li-signal-card, .de-signal-card, .dt-signal-card, .de-watch-card, .li-index-card, .de-index-card, .dt-index-card, .role-card, .leader-row, .li-ladder-rows, .de-ladder-rows, .dt-ladder-rows, .li-ladder-row, .de-ladder-row, .dt-ladder-row, .de-roles-panel, .li-roles-panel, .dt-roles-panel, .de-roles-grid, .li-roles-grid, .dt-roles-grid, .theme-row, .li-theme-row, .dt-theme-row, .theme-bar-row, .deep-dive-card, .deep-dive-item, .footer, .li-footer, .de-footer, .dt-footer'));
       const visibleNodes = [];
       const isFooterNode = (el) => el.tagName === 'FOOTER' || Array.from(el.classList).some((name) => name.includes('footer'));
       for (const el of nodes) {
@@ -3062,7 +3063,7 @@ export async function runBrowserPreflight(page) {
         const boxHeight = el.clientHeight || r.height;
         const overflowX = el.scrollWidth > boxWidth + 8;
         const overflowY = el.scrollHeight > boxHeight + 8;
-        const criticalOverflow = el.matches('[data-fit], .de-judgement-body, .li-ladder-rows, .de-ladder-rows, .dt-ladder-rows, .deep-dive-card, .deep-dive-item, .theme-bar-row, .de-watch-card');
+        const criticalOverflow = el.matches('[data-fit], .de-judgement-body, .li-ladder-rows, .de-ladder-rows, .dt-ladder-rows, .de-roles-panel, .li-roles-panel, .dt-roles-panel, .de-roles-grid, .li-roles-grid, .dt-roles-grid, .role-card, .deep-dive-card, .deep-dive-item, .theme-bar-row, .de-watch-card');
         if ((overflowX || overflowY) && (!overflowHidden || criticalOverflow)) {
           const snippet = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 48);
           errors.push(`page ${pageNo}: overflow ${overflowX ? 'x' : ''}${overflowY ? 'y' : ''} at ${el.className || el.tagName}: ${snippet}`);
@@ -3071,6 +3072,16 @@ export async function runBrowserPreflight(page) {
         if (!isFooter && (r.left < safe.left - 1 || r.right > safe.right + 1 || r.top < safe.top - 1 || r.bottom > safe.bottom + 1)) {
           const snippet = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 48);
           errors.push(`page ${pageNo}: safe-area violation at ${el.className || el.tagName}: ${snippet}`);
+        }
+        const parentPanel = el.closest('.de-panel, .li-panel, .dt-panel, .panel:not(.role-card)');
+        if (parentPanel && parentPanel !== el && parentPanel.contains(el)) {
+          const parentRect = parentPanel.getBoundingClientRect();
+          const parentStyle = window.getComputedStyle(parentPanel);
+          const clipsChildren = parentStyle.overflow === 'hidden' || parentStyle.overflowY === 'hidden' || parentStyle.overflowX === 'hidden';
+          if (clipsChildren && (r.left < parentRect.left - 2 || r.right > parentRect.right + 2 || r.top < parentRect.top - 2 || r.bottom > parentRect.bottom + 2)) {
+            const snippet = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 48);
+            errors.push(`page ${pageNo}: parent-panel clipping at ${el.className || el.tagName}: ${snippet}`);
+          }
         }
       }
       const footers = visibleNodes.filter(({ el }) => isFooterNode(el));
@@ -3088,6 +3099,25 @@ export async function runBrowserPreflight(page) {
           if (overlapsFooter) {
             const snippet = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 48);
             errors.push(`page ${pageNo}: footer overlap at ${el.className || el.tagName}: ${snippet}`);
+          }
+        }
+      }
+      const topLevelPanels = visibleNodes.filter(({ el }) =>
+        el.matches('.de-frame > .de-panel, .li-paper > .li-panel, .dt-shell > .dt-panel, .poster > .panel:not(.role-card)')
+      );
+      for (let i = 0; i < topLevelPanels.length; i += 1) {
+        for (let j = i + 1; j < topLevelPanels.length; j += 1) {
+          const a = topLevelPanels[i];
+          const b = topLevelPanels[j];
+          const overlapsPanel =
+            a.rect.left < b.rect.right - 1 &&
+            a.rect.right > b.rect.left + 1 &&
+            a.rect.top < b.rect.bottom - 1 &&
+            a.rect.bottom > b.rect.top + 1;
+          if (overlapsPanel) {
+            const leftSnippet = (a.el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 32);
+            const rightSnippet = (b.el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 32);
+            errors.push(`page ${pageNo}: panel overlap between ${a.el.className || a.el.tagName}: ${leftSnippet} and ${b.el.className || b.el.tagName}: ${rightSnippet}`);
           }
         }
       }
